@@ -21,4 +21,22 @@ const pool = new Pool({
     port: process.env.DB_PORT,
 });
 
-export const query = (text, params) => pool.query(text, params);
+// 添加连接错误处理和日志记录
+pool.on('error', (err) => {
+    console.error('数据库连接池错误:', err);
+});
+
+// 包装查询函数，添加错误日志
+export const query = async (text, params) => {
+    try {
+        return await pool.query(text, params);
+    } catch (error) {
+        console.error('数据库查询错误:', {
+            query: text,
+            params,
+            error: error.message,
+            stack: error.stack
+        });
+        throw error;
+    }
+};

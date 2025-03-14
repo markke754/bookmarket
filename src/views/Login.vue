@@ -2,6 +2,9 @@
   <div class="login-container">
     <el-card class="login-card">
       <div class="login-header">
+        <el-button type="text" @click="$router.push('/')" class="back-home-button">
+          <el-icon><ArrowLeft /></el-icon> 返回主页
+        </el-button>
         <h2>登录</h2>
         <p class="login-subtitle">欢迎回到图书商城系统</p>
       </div>
@@ -14,6 +17,14 @@
           <el-input v-model="password" type="password" placeholder="请输入密码" prefix-icon="el-icon-lock" show-password />
         </el-form-item>
         
+        <el-form-item>
+          <el-select v-model="role" placeholder="请选择角色" class="role-select">
+            <el-option label="买家" value="buyer" />
+            <el-option label="卖家" value="seller" />
+            <el-option label="管理员" value="admin" />
+          </el-select>
+        </el-form-item>
+
         <el-form-item class="login-actions">
           <el-button type="primary" native-type="submit" :loading="loading" class="login-button">登录</el-button>
           <div class="register-link">
@@ -31,27 +42,28 @@ import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import { ElMessage } from 'element-plus';
+import { ArrowLeft } from '@element-plus/icons-vue';
 
 const router = useRouter();
 const authStore = useAuthStore();
 
 const username = ref('');
 const password = ref('');
+const role = ref('');
 const loading = ref(false);
 
 async function handleLogin() {
-  if (!username.value || !password.value) {
-    ElMessage.warning('请输入用户名和密码');
+  if (!username.value || !password.value || !role.value) {
+    ElMessage.warning('请输入用户名、密码和选择角色');
     return;
   }
   
   loading.value = true;
   try {
-    const success = await authStore.login(username.value, password.value);
+    const success = await authStore.login(username.value, password.value, role.value);
     if (success) {
       ElMessage.success('登录成功');
-      const role = authStore.userRole;
-      router.push(`/${role}`);
+      router.push(`/${role.value}`);
     } else {
       ElMessage.error('登录失败');
     }
@@ -81,6 +93,7 @@ async function handleLogin() {
 .login-header {
   text-align: center;
   margin-bottom: 30px;
+
 }
 
 .login-header h2 {
@@ -119,5 +132,24 @@ async function handleLogin() {
 
 .el-input__inner {
   padding: 12px 15px;
+}
+
+.back-home-button {
+  position: absolute;
+  left: 20px;
+  top: 20px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.back-home-button:hover {
+  color: var(--text-primary);
+}
+
+.role-select {
+  width: 100%;
 }
 </style>

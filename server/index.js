@@ -182,6 +182,57 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
     }
 });
 
+// 更新图书（卖家）
+app.put('/api/books/:id', authenticateToken, async (req, res) => {
+    try {
+        if (req.user.role !== 'seller') {
+            return res.status(403).json({ message: '只有卖家可以更新图书' });
+        }
+
+        const { id } = req.params;
+        const { title, author, price, stock, description } = req.body;
+
+        // 验证图书是否属于该卖家
+        const bookCheck = await db('SELECT * FROM books WHERE id = $1 AND seller_id = $2', [id, req.user.id]);
+        if (bookCheck.rows.length === 0) {
+            return res.status(404).json({ message: '图书不存在或无权限修改' });
+        }
+
+        const result = await db(
+            'UPDATE books SET title = $1, author = $2, price = $3, stock = $4, description = $5 WHERE id = $6 AND seller_id = $7 RETURNING *',
+            [title, author, price, stock, description, id, req.user.id]
+        );
+
+        res.json(result.rows[0]);
+    } catch (error) {
+        console.error('更新图书失败:', error);
+        res.status(500).json({ message: '更新图书失败', error: error.message });
+    }
+});
+
+// 删除图书（卖家）
+app.delete('/api/books/:id', authenticateToken, async (req, res) => {
+    try {
+        if (req.user.role !== 'seller') {
+            return res.status(403).json({ message: '只有卖家可以删除图书' });
+        }
+
+        const { id } = req.params;
+
+        // 验证图书是否属于该卖家
+        const bookCheck = await db('SELECT * FROM books WHERE id = $1 AND seller_id = $2', [id, req.user.id]);
+        if (bookCheck.rows.length === 0) {
+            return res.status(404).json({ message: '图书不存在或无权限删除' });
+        }
+
+        await db('DELETE FROM books WHERE id = $1 AND seller_id = $2', [id, req.user.id]);
+        res.json({ message: '图书删除成功' });
+    } catch (error) {
+        console.error('删除图书失败:', error);
+        res.status(500).json({ message: '删除图书失败', error: error.message });
+    }
+});
+
 app.listen(PORT, () => {
     console.log(`服务器运行在 http://localhost:${PORT}`);
 });

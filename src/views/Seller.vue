@@ -28,6 +28,7 @@
         <el-table-column label="操作" width="120" align="center">
           <template #default="{ row }">
             <el-button type="primary" size="small" @click="editBook(row)" icon="el-icon-edit" circle />
+            <el-button type="danger" size="small" @click="deleteBook(row)" icon="el-icon-delete" circle />
           </template>
         </el-table-column>
       </el-table>
@@ -67,7 +68,7 @@
 import { ref, onMounted } from 'vue';
 import { useAuthStore } from '../stores/auth';
 import axios from 'axios';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 
 const authStore = useAuthStore();
 const books = ref([]);
@@ -80,6 +81,37 @@ const bookForm = ref({
   stock: 0,
   description: ''
 });
+
+async function deleteBook(book) {
+  try {
+    await ElMessageBox.confirm('确定要删除这本图书吗？', '提示', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    });
+    
+    await axios.delete(`http://localhost:3000/api/books/${book.id}`, {
+      headers: { Authorization: `Bearer ${authStore.token}` }
+    });
+    ElMessage.success('删除成功');
+    loadBooks();
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('删除图书失败:', error);
+      if (error.response?.status === 404) {
+        ElMessage.error('图书不存在或无权限删除');
+      } else if (error.response?.status === 403) {
+        ElMessage.error('没有删除权限');
+      } else if (error.response?.data?.message) {
+        ElMessage.error(error.response.data.message);
+      } else if (!error.response) {
+        ElMessage.error('网络连接失败，请检查服务器是否正常运行');
+      } else {
+        ElMessage.error('删除失败，请稍后重试');
+      }
+    }
+  }
+}
 
 async function loadBooks() {
   try {
@@ -114,7 +146,8 @@ async function submitBook() {
     dialogVisible.value = false;
     loadBooks();
   } catch (error) {
-    ElMessage.error(isEdit.value ? '更新失败' : '添加失败');
+    console.error(isEdit.value ? '更新图书失败:' : '添加图书失败:', error);
+    ElMessage.error(error.response?.data?.message || (isEdit.value ? '更新失败，请检查网络连接' : '添加失败，请检查网络连接'));
   }
 }
 

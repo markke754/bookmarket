@@ -2,6 +2,9 @@
   <div class="register-container">
     <el-card class="register-card">
       <div class="register-header">
+        <el-button type="text" @click="$router.push('/')" class="back-home-button">
+          <el-icon><ArrowLeft /></el-icon> 返回主页
+        </el-button>
         <h2>注册</h2>
         <p class="register-subtitle">创建您的图书商城账号</p>
       </div>
@@ -22,6 +25,7 @@
           <el-select v-model="role" placeholder="请选择角色" class="role-select">
             <el-option label="买家" value="buyer" />
             <el-option label="卖家" value="seller" />
+            <el-option label="管理员" value="admin" />
           </el-select>
         </el-form-item>
         
@@ -42,6 +46,7 @@ import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import { ElMessage } from 'element-plus';
+import { ArrowLeft } from '@element-plus/icons-vue';
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -102,6 +107,22 @@ async function handleRegister() {
 .register-header {
   text-align: center;
   margin-bottom: 30px;
+
+}
+
+.back-home-button {
+  position: absolute;
+  left: 20px;
+  top: 20px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.back-home-button:hover {
+  color: var(--text-primary);
 }
 
 .register-header h2 {
