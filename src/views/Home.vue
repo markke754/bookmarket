@@ -30,7 +30,8 @@
         <el-col v-for="book in books" :key="book.id" :xs="24" :sm="12" :md="8" :lg="6">
           <el-card :body-style="{ padding: '0px' }" class="book-card" shadow="hover">
             <div class="book-cover">
-              <div class="book-cover-placeholder"></div>
+              <img v-if="book.image_url" :src="getImageUrl(book.image_url)" class="book-cover-image" />
+              <div v-else class="book-cover-placeholder"></div>
             </div>
             <div class="book-info">
               <h3 class="book-title">{{ book.title }}</h3>
@@ -105,6 +106,13 @@ const books = ref([]);
 const showGuide = ref(false);
 const showLoginPrompt = ref(false);
 const booksSection = ref(null);
+
+// 获取图片URL
+function getImageUrl(url) {
+  if (!url) return '';
+  if (url.startsWith('http')) return url;
+  return `http://localhost:3000${url}`;
+}
 
 // 加载图书数据
 async function loadBooks() {
@@ -227,6 +235,15 @@ onMounted(() => {
 .book-cover {
   height: 200px;
   overflow: hidden;
+  border: 1px solid #dcdfe6;
+  border-radius: var(--border-radius-small);
+}
+
+.book-cover-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: var(--border-radius-small);
 }
 
 .book-cover-placeholder {
@@ -236,6 +253,13 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.book-cover-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: var(--border-radius-small);
 }
 
 .book-info {

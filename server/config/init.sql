@@ -17,6 +17,7 @@ CREATE TABLE books (
     stock INTEGER NOT NULL,
     seller_id INTEGER REFERENCES users(id),
     description TEXT,
+    image_url VARCHAR(255),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

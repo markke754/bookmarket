@@ -25,7 +25,6 @@
           <el-select v-model="role" placeholder="请选择角色" class="role-select">
             <el-option label="买家" value="buyer" />
             <el-option label="卖家" value="seller" />
-            <el-option label="管理员" value="admin" />
           </el-select>
         </el-form-item>
         

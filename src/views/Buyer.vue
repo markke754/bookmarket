@@ -19,7 +19,8 @@
         <el-col v-for="book in books" :key="book.id" :xs="24" :sm="12" :md="8" :lg="6">
           <el-card :body-style="{ padding: '0px' }" class="book-card" shadow="hover">
             <div class="book-cover">
-              <div class="book-cover-placeholder"></div>
+              <img v-if="book.image_url" :src="getImageUrl(book.image_url)" class="book-cover-image" />
+              <div v-else class="book-cover-placeholder"></div>
             </div>
             <div class="book-info">
               <h3 class="book-title">{{ book.title }}</h3>
@@ -100,9 +101,17 @@ const total = computed(() => {
   return cartItems.value.reduce((sum, item) => sum + item.price * item.quantity, 0);
 });
 
+function getImageUrl(url) {
+  if (!url) return '';
+  if (url.startsWith('http')) return url;
+  return `http://localhost:3000${url}`;
+}
+
 async function loadBooks() {
   try {
-    const response = await axios.get('http://localhost:3000/api/books');
+    const response = await axios.get('http://localhost:3000/api/books', {
+      headers: { Authorization: `Bearer ${authStore.token}` }
+    });
     books.value = response.data;
   } catch (error) {
     console.error('获取图书列表失败:', error);
@@ -190,6 +199,16 @@ onMounted(() => {
   display: flex;
   justify-content: center;
   align-items: center;
+  overflow: hidden;
+  border: 1px solid #dcdfe6;
+  border-radius: var(--border-radius-small);
+}
+
+.book-cover-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: var(--border-radius-small);
 }
 
 .book-cover-placeholder {
