@@ -1,12 +1,13 @@
 <template>
   <div class="register-container">
+    <LoadingIndicator :loading="loading" text="注册中..." />
     <el-card class="register-card">
       <div class="register-header">
         <el-button type="text" @click="$router.push('/')" class="back-home-button">
           <el-icon><ArrowLeft /></el-icon> 返回主页
         </el-button>
         <h2>注册</h2>
-        <p class="register-subtitle">创建您的图书商城账号</p>
+        <p class="register-subtitle">加入图书商城系统</p>
       </div>
       <el-form @submit.prevent="handleRegister">
         <el-form-item>
@@ -32,7 +33,7 @@
           <el-button type="primary" native-type="submit" :loading="loading" class="register-button">注册</el-button>
           <div class="login-link">
             <span>已有账号？</span>
-            <el-button type="text" @click="$router.push('/login')">返回登录</el-button>
+            <el-button type="text" @click="$router.push('/login')">立即登录</el-button>
           </div>
         </el-form-item>
       </el-form>
@@ -41,11 +42,12 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import { ElMessage } from 'element-plus';
 import { ArrowLeft } from '@element-plus/icons-vue';
+import LoadingIndicator from '../components/LoadingIndicator.vue';
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -54,7 +56,7 @@ const username = ref('');
 const password = ref('');
 const email = ref('');
 const role = ref('');
-const loading = ref(false);
+const loading = computed(() => authStore.loading);
 
 async function handleRegister() {
   if (!username.value || !password.value || !email.value || !role.value) {
@@ -62,26 +64,27 @@ async function handleRegister() {
     return;
   }
   
-  loading.value = true;
   try {
     const result = await authStore.register({
       username: username.value,
       password: password.value,
       email: email.value,
-      role: role.value,
+      role: role.value
     });
     
     if (result.success) {
       ElMessage.success(result.message || '注册成功');
       router.push('/login');
-    } else {
-      ElMessage.error(result.message || '注册失败');
+    } else if (result.message) {
+      ElMessage.error(result.message);
     }
   } catch (error) {
     console.error('注册处理错误:', error);
-    ElMessage.error('注册过程中发生错误');
-  } finally {
-    loading.value = false;
+    if (error.message === 'Network Error') {
+      ElMessage.error('无法连接到服务器，请检查网络连接');
+    } else {
+      ElMessage.error(error.response?.data?.message || '注册失败，请稍后重试');
+    }
   }
 }
 </script>

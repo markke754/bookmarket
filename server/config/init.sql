@@ -40,3 +40,14 @@ CREATE TABLE cart_items (
     quantity INTEGER NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- 创建收款码表
+CREATE TABLE payment_codes (
+    id SERIAL PRIMARY KEY,
+    seller_id INTEGER REFERENCES users(id),
+    type VARCHAR(20) NOT NULL CHECK (type IN ('alipay', 'wechat')),
+    image_url VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (seller_id, type)
+);

@@ -1,5 +1,6 @@
 <template>
   <div class="login-container">
+    <LoadingIndicator :loading="loading" text="登录中..." />
     <el-card class="login-card">
       <div class="login-header">
         <el-button type="text" @click="$router.push('/')" class="back-home-button">
@@ -38,11 +39,12 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import { ElMessage } from 'element-plus';
 import { ArrowLeft } from '@element-plus/icons-vue';
+import LoadingIndicator from '../components/LoadingIndicator.vue';
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -50,7 +52,21 @@ const authStore = useAuthStore();
 const username = ref('');
 const password = ref('');
 const role = ref('');
+// 使用本地loading状态而非store中的状态
 const loading = ref(false);
+
+// 添加生命周期钩子，在组件挂载时输出日志，便于调试
+onMounted(() => {
+  console.log('登录页面已加载');
+  console.log('当前认证状态:', authStore.isAuthenticated);
+  console.log('当前用户角色:', authStore.userRole);
+  
+  // 强制刷新Pinia状态，确保与localStorage同步
+  if (localStorage.getItem('token') === null && authStore.token !== null) {
+    console.log('检测到状态不一致，正在重置Pinia状态');
+    authStore.logout();
+  }
+});
 
 async function handleLogin() {
   if (!username.value || !password.value || !role.value) {
@@ -58,17 +74,25 @@ async function handleLogin() {
     return;
   }
   
+  // 设置本地loading状态
   loading.value = true;
+  
   try {
     const success = await authStore.login(username.value, password.value, role.value);
     if (success) {
       ElMessage.success('登录成功');
       router.push(`/${role.value}`);
-    } else {
-      ElMessage.error('登录失败');
     }
+  } catch (error) {
+    console.error('登录处理错误:', error);
+    ElMessage.error('登录失败，请稍后重试');
   } finally {
+    // 确保loading状态被重置
     loading.value = false;
+    // 同时确保store中的loading状态也被重置
+    if (authStore.loading) {
+      authStore.$patch({ loading: false });
+    }
   }
 }
 </script>

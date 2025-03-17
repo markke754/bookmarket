@@ -1,862 +1,771 @@
 <template>
   <div class="seller-container">
-    <el-card class="main-card">
-      <template #header>
-        <div class="card-header">
-          <div class="header-left">
-            <i class="el-icon-sell header-icon"></i>
-            <span class="card-header-title">卖家中心</span>
-          </div>
-          <el-button type="danger" plain @click="authStore.logout(); $router.push('/login')" class="logout-btn">
-            <i class="el-icon-switch-button"></i> 退出登录
-          </el-button>
-        </div>
-      </template>
-      
-      <div class="content-section">
-        <div class="section-header">
-          <h3 class="section-title">图书管理</h3>
-          <p class="section-desc">管理您的图书库存和信息</p>
-          <div class="toolbar">
-            <el-input 
-              placeholder="搜索图书..." 
-              v-model="searchQuery" 
-              class="search-input" 
-              prefix-icon="el-icon-search"
-              clearable
-            ></el-input>
-            <el-button 
-              type="primary" 
-              @click="openAddBookDialog" 
-              icon="el-icon-plus" 
-              class="add-book-btn"
-            >添加图书</el-button>
-          </div>
+    <LoadingIndicator :loading="loading" text="加载中..." />
+    
+    <el-tabs v-model="activeTab" class="seller-tabs">
+      <el-tab-pane label="我的图书" name="books">
+        <div class="tab-header">
+          <h2>我的图书</h2>
+          <el-button type="primary" @click="showAddBookDialog">添加新书</el-button>
         </div>
         
-        <el-table 
-          :data="filteredBooks" 
-          style="width: 100%" 
-          border 
-          stripe
-          highlight-current-row
-          class="data-table"
-        >
-          <el-table-column label="封面" width="100" align="center">
-            <template #default="{ row }">
-              <div class="book-cover-container">
-                <img 
-                  v-if="row.image_url" 
-                  :src="getImageUrl(row.image_url)" 
-                  class="book-cover-image"
-                  @click="previewBookCover(row)" 
-                />
-                <div v-else class="book-cover-placeholder">
-                  <i class="el-icon-picture-outline"></i>
+        <div v-if="books.length === 0 && !loading" class="empty-state">
+          <el-empty description="您还没有添加任何图书" />
+          <el-button type="primary" @click="showAddBookDialog">添加第一本书</el-button>
+        </div>
+        
+        <el-table v-else :data="books" style="width: 100%" border>
+          <el-table-column label="封面" width="100">
+            <template #default="scope">
+              <div class="book-cover">
+                <div v-if="scope.row.image_url" class="image-container">
+                  <el-image 
+                    :src="getImageUrl(scope.row.image_url)" 
+                    :preview-src-list="[getImageUrl(scope.row.image_url)]"
+                    fit="cover"
+                    @load="handleImageLoaded('表格图片', scope.row.image_url)" 
+                    @error="handleImageError('表格图片', scope.row.image_url)"
+                  >
+                    <template #error>
+                      <div class="image-error">
+                        <el-icon><Picture /></el-icon>
+                        <span>加载失败</span>
+                      </div>
+                    </template>
+                  </el-image>
                 </div>
+                <el-icon v-else><Picture /></el-icon>
               </div>
             </template>
           </el-table-column>
-          <el-table-column prop="title" label="书名" min-width="150">
-            <template #default="{ row }">
-              <div class="book-title">{{ row.title }}</div>
-              <div class="book-desc" v-if="row.description">{{ truncateText(row.description, 50) }}</div>
+          <el-table-column prop="title" label="书名" />
+          <el-table-column prop="author" label="作者" />
+          <el-table-column prop="price" label="价格">
+            <template #default="scope">
+              ¥{{ scope.row.price }}
             </template>
           </el-table-column>
-          <el-table-column prop="author" label="作者" min-width="120" />
-          <el-table-column prop="price" label="价格" width="100">
-            <template #default="{ row }">
-              <span class="price">¥{{ formatPrice(row.price) }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column prop="stock" label="库存" width="100">
-            <template #default="{ row }">
-              <el-tag 
-                :type="row.stock > 10 ? 'success' : row.stock > 0 ? 'warning' : 'danger'"
-                size="medium"
-                effect="dark"
-              >
-                {{ row.stock }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="操作" width="150" align="center" fixed="right">
-            <template #default="{ row }">
-              <el-button 
-                type="primary" 
-                size="small" 
-                @click="editBook(row)" 
-                icon="el-icon-edit" 
-                circle 
-                title="编辑图书"
-              />
-              <el-button 
-                type="danger" 
-                size="small" 
-                @click="deleteBook(row)" 
-                icon="el-icon-delete" 
-                circle
-                title="删除图书"
-              />
+          <el-table-column prop="stock" label="库存" />
+          <el-table-column label="操作" width="200">
+            <template #default="scope">
+              <el-button size="small" @click="editBook(scope.row)">编辑</el-button>
+              <el-button size="small" type="danger" @click="confirmDeleteBook(scope.row)">删除</el-button>
             </template>
           </el-table-column>
         </el-table>
-        
-        <el-empty v-if="filteredBooks.length === 0" description="暂无图书" class="empty-state" />
-      </div>
+      </el-tab-pane>
       
-      <!-- 图片预览对话框 -->
-      <el-dialog v-model="imagePreviewVisible" title="图片预览" width="50%" destroy-on-close center class="preview-dialog">
-        <div class="image-preview-container">
-          <img :src="imagePreviewUrl" class="preview-image-large" />
+      <el-tab-pane label="订单管理" name="orders">
+        <div class="tab-header">
+          <h2>订单管理</h2>
         </div>
-      </el-dialog>
+        
+        <div v-if="orders.length === 0 && !loading" class="empty-state">
+          <el-empty description="暂无订单" />
+        </div>
+        
+        <el-table v-else :data="orders" style="width: 100%" border>
+          <el-table-column prop="id" label="订单ID" width="80" />
+          <el-table-column prop="buyer.username" label="买家" />
+          <el-table-column prop="book.title" label="图书" />
+          <el-table-column prop="quantity" label="数量" width="80" />
+          <el-table-column prop="total_price" label="金额">
+            <template #default="scope">
+              ¥{{ scope.row.total_price }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="payment_method" label="支付方式">
+            <template #default="scope">
+              {{ scope.row.payment_method === 'alipay' ? '支付宝' : '微信支付' }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="created_at" label="创建时间">
+            <template #default="scope">
+              {{ formatDate(scope.row.created_at) }}
+            </template>
+          </el-table-column>
+        </el-table>
+      </el-tab-pane>
       
-      <el-dialog 
-        v-model="dialogVisible" 
-        :title="isEdit ? '编辑图书' : '添加图书'" 
-        width="600px"
-        destroy-on-close
-        class="book-form-dialog"
-      >
-        <el-form 
-          :model="bookForm" 
-          label-width="100px" 
-          ref="bookFormRef" 
-          enctype="multipart/form-data"
-          class="book-form"
-          :rules="bookFormRules"
-        >
-          <el-form-item label="书名" prop="title">
-            <el-input 
-              v-model="bookForm.title" 
-              placeholder="请输入书名" 
-              prefix-icon="el-icon-reading"
-              maxlength="100"
-              show-word-limit
-            />
-          </el-form-item>
-          <el-form-item label="作者" prop="author">
-            <el-input 
-              v-model="bookForm.author" 
-              placeholder="请输入作者" 
-              prefix-icon="el-icon-user"
-              maxlength="50"
-              show-word-limit
-            />
-          </el-form-item>
-          
-          <div class="form-row">
-            <el-form-item label="价格" prop="price" class="form-col">
-              <el-input-number 
-                v-model="bookForm.price" 
-                :precision="2" 
-                :step="0.1" 
-                :min="0" 
-                style="width: 100%" 
-                placeholder="设置价格"
-              />
-            </el-form-item>
-            <el-form-item label="库存" prop="stock" class="form-col">
-              <el-input-number 
-                v-model="bookForm.stock" 
-                :min="0" 
-                style="width: 100%" 
-                placeholder="设置库存"
-              />
-            </el-form-item>
-          </div>
-          
-          <el-form-item label="描述" prop="description">
-            <el-input 
-              v-model="bookForm.description" 
-              type="textarea" 
-              :rows="4" 
-              placeholder="请输入图书描述，包括内容简介、适合读者群体等信息"
-              maxlength="500"
-              show-word-limit
-            />
-          </el-form-item>
-          
-          <el-form-item label="封面图片" class="upload-item">
-            <el-upload
-              class="book-image-uploader"
-              action="#"
-              :auto-upload="false"
-              :show-file-list="true"
-              :limit="1"
-              :on-change="handleImageChange"
-              :on-exceed="handleExceed"
-              :before-remove="handleRemove"
-            >
-              <template #default>
-                <div class="el-upload-dragger">
-                  <el-icon class="el-icon--upload">
-                    <i class="el-icon-upload"></i>
-                  </el-icon>
-                  <div class="el-upload__text">拖拽图片到此处或 <em>点击上传</em></div>
-                  <div class="upload-tip">支持 JPG/PNG/GIF 格式，大小不超过 5MB</div>
+      <el-tab-pane label="支付设置" name="payment">
+        <div class="tab-header">
+          <h2>支付设置</h2>
+        </div>
+        
+        <div class="payment-settings">
+          <el-form :model="paymentSettings" label-width="120px">
+            <el-form-item label="支付宝收款码">
+              <el-upload
+                class="payment-code-uploader"
+                :action="`${apiUrl}/api/seller/payment-codes`"
+                :headers="uploadHeaders"
+                :show-file-list="false"
+                :on-success="handleAlipayUploadSuccess"
+                :on-error="handleUploadError"
+                :before-upload="beforeUpload"
+                name="file"
+              >
+                <img v-if="paymentSettings.alipayCode" :src="getImageUrl(paymentSettings.alipayCode)" class="payment-code-preview" />
+                <div v-else class="payment-code-placeholder">
+                  <el-icon><Plus /></el-icon>
+                  <span>点击上传支付宝收款码</span>
                 </div>
-              </template>
-              <template #file="{ file }">
-                <div class="el-upload-list__item">
-                  <img class="el-upload-list__item-thumbnail" :src="file.url" alt="" />
-                  <div class="el-upload-list__item-actions">
-                    <span class="el-upload-list__item-preview" @click="previewImage(file)">
-                      <i class="el-icon-zoom-in"></i>
-                    </span>
-                    <span class="el-upload-list__item-delete" @click="handleRemove(file)">
-                      <i class="el-icon-delete"></i>
-                    </span>
+              </el-upload>
+            </el-form-item>
+            
+            <el-form-item label="微信支付收款码">
+              <el-upload
+                class="payment-code-uploader"
+                :action="`${apiUrl}/api/seller/payment-codes`"
+                :headers="uploadHeaders"
+                :show-file-list="false"
+                :on-success="handleWechatUploadSuccess"
+                :on-error="handleUploadError"
+                :before-upload="beforeUpload"
+                name="file"
+              >
+                <img v-if="paymentSettings.wechatCode" :src="getImageUrl(paymentSettings.wechatCode)" class="payment-code-preview" />
+                <div v-else class="payment-code-placeholder">
+                  <el-icon><Plus /></el-icon>
+                  <span>点击上传微信支付收款码</span>
+                </div>
+              </el-upload>
+            </el-form-item>
+          </el-form>
+        </div>
+      </el-tab-pane>
+    </el-tabs>
+    
+    <!-- 添加/编辑图书对话框 -->
+    <el-dialog
+      v-model="bookDialogVisible"
+      :title="isEditMode ? '编辑图书' : '添加图书'"
+      width="50%"
+    >
+      <el-form :model="bookForm" :rules="bookRules" ref="bookFormRef" label-width="100px">
+        <el-form-item label="书名" prop="title">
+          <el-input v-model="bookForm.title" placeholder="请输入书名" />
+        </el-form-item>
+        
+        <el-form-item label="作者" prop="author">
+          <el-input v-model="bookForm.author" placeholder="请输入作者" />
+        </el-form-item>
+        
+        <el-form-item label="分类" prop="category">
+          <el-select v-model="bookForm.category" placeholder="请选择分类">
+            <el-option
+              v-for="category in categories"
+              :key="category"
+              :label="category"
+              :value="category"
+            />
+            <el-option label="其他" value="其他" />
+          </el-select>
+        </el-form-item>
+        
+        <el-form-item label="价格" prop="price">
+          <el-input-number v-model="bookForm.price" :precision="2" :step="0.01" :min="0" />
+        </el-form-item>
+        
+        <el-form-item label="库存" prop="stock">
+          <el-input-number v-model="bookForm.stock" :min="0" :step="1" />
+        </el-form-item>
+        
+        <el-form-item label="描述" prop="description">
+          <el-input v-model="bookForm.description" type="textarea" rows="4" placeholder="请输入图书描述" />
+        </el-form-item>
+        
+        <el-form-item label="封面图片">
+          <el-upload
+            class="book-cover-uploader"
+            :action="`${apiUrl}/api/books/upload`"
+            :headers="uploadHeaders"
+            :show-file-list="false"
+            :on-success="handleCoverUploadSuccess"
+            :on-error="handleUploadError"
+            :before-upload="beforeUpload"
+            name="file"
+            accept="image/jpeg,image/png,image/gif"
+          >
+            <div v-if="bookForm.image_url" class="image-container">
+              <el-image 
+                :src="getImageUrl(bookForm.image_url)" 
+                :preview-src-list="[getImageUrl(bookForm.image_url)]"
+                fit="cover"
+                class="book-cover-preview"
+                @load="handleImageLoaded('表单图片', bookForm.image_url)" 
+                @error="handleImageError('表单图片', bookForm.image_url)"
+              >
+                <template #error>
+                  <div class="image-error">
+                    <el-icon><Picture /></el-icon>
+                    <span>加载失败</span>
                   </div>
-                </div>
-              </template>
-            </el-upload>
-            <div v-if="bookForm.image_url && !imageFile" class="current-image">
-              <p>当前图片：</p>
-              <img :src="getImageUrl(bookForm.image_url)" class="preview-image" @click="previewCurrentImage" />
-              <el-button size="small" type="danger" icon="el-icon-delete" @click="removeCurrentImage" class="remove-image-btn">删除图片</el-button>
+                </template>
+              </el-image>
             </div>
-          </el-form-item>
-        </el-form>
-        <template #footer>
-          <div class="dialog-footer">
-            <el-button @click="cancelForm">取消</el-button>
-            <el-button type="primary" @click="submitBook" :loading="submitting">{{ isEdit ? '保存修改' : '添加图书' }}</el-button>
-          </div>
-        </template>
-      </el-dialog>
-    </el-card>
+            <div v-else class="book-cover-placeholder">
+              <el-icon><Plus /></el-icon>
+              <span>点击上传封面</span>
+            </div>
+          </el-upload>
+        </el-form-item>
+      </el-form>
+      
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="bookDialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="submitBookForm" :loading="submitting">确定</el-button>
+        </span>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue';
+import { ref, reactive, computed, onMounted, watch } from 'vue';
 import { useAuthStore } from '../stores/auth';
-import axios from 'axios';
 import { ElMessage, ElMessageBox } from 'element-plus';
+import { Picture, Plus } from '@element-plus/icons-vue';
+import LoadingIndicator from '../components/LoadingIndicator.vue';
+import axios from 'axios';
+import { useRouter } from 'vue-router';
 
+// 创建实例
+const router = useRouter();
 const authStore = useAuthStore();
-const books = ref([]);
-const dialogVisible = ref(false);
-const isEdit = ref(false);
-const submitting = ref(false);
-const searchQuery = ref('');
-const bookFormRef = ref(null);
+const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
-const bookForm = ref({
+console.log('API URL:', apiUrl);
+
+// 状态变量
+const activeTab = ref('books');
+const loading = ref(false);
+const submitting = ref(false);
+const books = ref([]);
+const orders = ref([]);
+const categories = ref([]);
+const bookDialogVisible = ref(false);
+const isEditMode = ref(false);
+const bookForm = reactive({
+  id: null,
   title: '',
   author: '',
+  category: '',
   price: 0,
   stock: 0,
   description: '',
   image_url: ''
 });
-
-const imageFile = ref(null);
-const imagePreviewVisible = ref(false);
-const imagePreviewUrl = ref('');
-
-// 表单验证规则
-const bookFormRules = {
-  title: [
-    { required: true, message: '请输入书名', trigger: 'blur' },
-    { min: 2, max: 100, message: '书名长度应在2到100个字符之间', trigger: 'blur' }
-  ],
-  author: [
-    { required: true, message: '请输入作者', trigger: 'blur' },
-    { min: 2, max: 50, message: '作者名长度应在2到50个字符之间', trigger: 'blur' }
-  ],
-  price: [
-    { required: true, message: '请设置价格', trigger: 'change' },
-    { type: 'number', min: 0, message: '价格不能小于0', trigger: 'change' }
-  ],
-  stock: [
-    { required: true, message: '请设置库存', trigger: 'change' },
-    { type: 'number', min: 0, message: '库存不能小于0', trigger: 'change' }
-  ],
-  description: [
-    { max: 500, message: '描述最多500个字符', trigger: 'blur' }
-  ]
+const bookRules = {
+  title: [{ required: true, message: '请输入书名', trigger: 'blur' }],
+  author: [{ required: true, message: '请输入作者', trigger: 'blur' }],
+  category: [{ required: true, message: '请选择分类', trigger: 'blur' }],
+  price: [{ required: true, message: '请输入价格', trigger: 'blur' }],
+  stock: [{ required: true, message: '请输入库存', trigger: 'blur' }]
 };
-
-// 搜索过滤的图书列表
-const filteredBooks = computed(() => {
-  if (!searchQuery.value) return books.value;
-  
-  const query = searchQuery.value.toLowerCase();
-  return books.value.filter(book => 
-    book.title.toLowerCase().includes(query) || 
-    book.author.toLowerCase().includes(query) ||
-    (book.description && book.description.toLowerCase().includes(query))
-  );
+const paymentSettings = reactive({
+  alipayCode: '',
+  wechatCode: ''
 });
+const bookFormRef = ref(null);
 
-// 打开添加图书对话框
-function openAddBookDialog() {
-  isEdit.value = false;
-  bookForm.value = {
-    title: '',
-    author: '',
-    price: 0,
-    stock: 0,
-    description: '',
-    image_url: ''
-  };
-  imageFile.value = null;
-  dialogVisible.value = true;
-  // 确保对话框显示后重置表单
-  nextTick(() => {
-    if (bookFormRef.value) {
-      bookFormRef.value.resetFields();
-    }
+// 计算属性
+const uploadHeaders = computed(() => ({
+  Authorization: `Bearer ${authStore.token}`
+}));
+
+// 获取图片URL
+function getImageUrl(image) {
+  if (!image) {
+    console.warn('获取图片URL失败: 路径为空');
+    return '';
+  }
+  
+  console.log('处理图片路径:', image);
+  
+  // 如果已经是完整URL，直接返回
+  if (image.startsWith('http')) {
+    return image;
+  }
+  
+  // 直接使用绝对路径访问
+  if (image.startsWith('/uploads/')) {
+    const fullUrl = `${apiUrl}${image}`;
+    console.log('构建的完整绝对URL:', fullUrl);
+    return fullUrl;
+  }
+  
+  // 确保路径以/uploads开头
+  let normalizedPath = image;
+  if (!normalizedPath.startsWith('/uploads') && !normalizedPath.startsWith('uploads')) {
+    normalizedPath = `/uploads/${normalizedPath.replace(/^\/+/, '')}`;
+  } else if (normalizedPath.startsWith('uploads/')) {
+    normalizedPath = `/${normalizedPath}`;
+  }
+  
+  // 构建完整URL
+  const fullUrl = `${apiUrl}${normalizedPath}`;
+  console.log('构建的完整URL:', fullUrl);
+  
+  // 额外检查是否能够访问该图片
+  testImageAccess(fullUrl, normalizedPath);
+  
+  return fullUrl;
+}
+
+// 测试图片是否可访问
+function testImageAccess(url, originalPath) {
+  // 使用API检查图片路径
+  axios.get(`${apiUrl}/api/check-static-path`, {
+    params: { path: originalPath }
+  })
+  .then(response => {
+    console.log('图片路径检查结果:', response.data);
+  })
+  .catch(error => {
+    console.error('检查图片路径失败:', error);
   });
 }
 
-// 截断文本
-function truncateText(text, maxLength) {
-  if (!text) return '';
-  return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
+// 格式化日期
+function formatDate(dateString) {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  return date.toLocaleString();
 }
 
-// 格式化价格
-function formatPrice(price) {
-  return Number(price).toFixed(2);
-}
-
-// 预览书籍封面
-function previewBookCover(book) {
-  if (book.image_url) {
-    imagePreviewUrl.value = getImageUrl(book.image_url);
-    imagePreviewVisible.value = true;
+// 获取图书列表
+async function fetchBooks() {
+  loading.value = true;
+  try {
+    console.log('正在获取图书列表...');
+    const response = await axios.get(`${apiUrl}/api/seller/books`);
+    console.log('获取图书列表响应:', response.data);
+    
+    // 详细检查每本书的图片URL
+    if (response.data.books && response.data.books.length > 0) {
+      response.data.books.forEach((book, index) => {
+        console.log(`图书${index+1}:`, {
+          id: book.id,
+          title: book.title,
+          image_url: book.image_url,
+          full_image_url: book.image_url ? getImageUrl(book.image_url) : '无图片'
+        });
+      });
+    }
+    
+    books.value = response.data.books || [];
+  } catch (error) {
+    console.error('获取图书列表失败:', error);
+    ElMessage.error('获取图书列表失败');
+  } finally {
+    loading.value = false;
   }
 }
 
-// 删除当前图片
-function removeCurrentImage() {
-  ElMessageBox.confirm('确定要删除当前图片吗?', '提示', {
+// 获取订单列表
+async function fetchOrders() {
+  loading.value = true;
+  try {
+    console.log('正在获取订单列表...');
+    const response = await axios.get(`${apiUrl}/api/seller/orders`);
+    console.log('获取订单列表响应:', response.data);
+    orders.value = response.data.orders || [];
+  } catch (error) {
+    console.error('获取订单列表失败:', error);
+    ElMessage.error('获取订单列表失败');
+  } finally {
+    loading.value = false;
+  }
+}
+
+// 获取分类列表
+async function fetchCategories() {
+  try {
+    const response = await axios.get(`${apiUrl}/api/books/categories`);
+    categories.value = response.data.categories;
+  } catch (error) {
+    console.error('获取分类列表失败:', error);
+  }
+}
+
+// 获取支付设置
+async function fetchPaymentSettings() {
+  loading.value = true;
+  try {
+    console.log('正在获取支付设置...');
+    const response = await axios.get(`${apiUrl}/api/seller/payment-codes`);
+    console.log('获取支付设置响应:', response.data);
+    if (response.data.alipay) {
+      paymentSettings.alipayCode = response.data.alipay;
+    }
+    if (response.data.wechat) {
+      paymentSettings.wechatCode = response.data.wechat;
+    }
+  } catch (error) {
+    console.error('获取支付设置失败:', error);
+    ElMessage.error('获取支付设置失败');
+  } finally {
+    loading.value = false;
+  }
+}
+
+// 显示添加图书对话框
+function showAddBookDialog() {
+  isEditMode.value = false;
+  resetBookForm();
+  bookDialogVisible.value = true;
+}
+
+// 编辑图书
+function editBook(book) {
+  isEditMode.value = true;
+  Object.assign(bookForm, book);
+  bookDialogVisible.value = true;
+}
+
+// 确认删除图书
+function confirmDeleteBook(book) {
+  ElMessageBox.confirm(`确定要删除《${book.title}》吗？此操作不可恢复。`, '提示', {
     confirmButtonText: '确定',
     cancelButtonText: '取消',
     type: 'warning'
   }).then(() => {
-    bookForm.value.image_url = null;
-    ElMessage.success('图片已删除');
+    deleteBook(book.id);
   }).catch(() => {});
 }
 
-// 取消表单
-function cancelForm() {
-  ElMessageBox.confirm('确定要取消操作吗？未保存的数据将丢失', '提示', {
-    confirmButtonText: '确定',
-    cancelButtonText: '返回编辑',
-    type: 'warning'
-  }).then(() => {
-    dialogVisible.value = false;
-    // 清理资源
-    nextTick(() => {
-      if (bookFormRef.value) {
-        bookFormRef.value.resetFields();
-      }
-      imageFile.value = null;
-    });
-  }).catch(() => {
-    // 用户取消关闭，继续编辑
-  });
-}
-
-async function deleteBook(book) {
+// 删除图书
+async function deleteBook(id) {
+  loading.value = true;
   try {
-    await ElMessageBox.confirm('确定要删除这本图书吗？', '提示', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning'
-    });
-    
-    await axios.delete(`http://localhost:3000/api/books/${book.id}`, {
-      headers: { Authorization: `Bearer ${authStore.token}` }
-    });
+    await axios.delete(`${apiUrl}/api/books/${id}`);
     ElMessage.success('删除成功');
-    loadBooks();
+    fetchBooks();
   } catch (error) {
-    if (error !== 'cancel') {
-      console.error('删除图书失败:', error);
-      if (error.response?.status === 404) {
-        ElMessage.error('图书不存在或无权限删除');
-      } else if (error.response?.status === 403) {
-        ElMessage.error('没有删除权限');
-      } else if (error.response?.data?.message) {
-        ElMessage.error(error.response.data.message);
-      } else if (!error.response) {
-        ElMessage.error('网络连接失败，请检查服务器是否正常运行');
-      } else {
-        ElMessage.error('删除失败，请稍后重试');
-      }
-    }
+    console.error('删除图书失败:', error);
+    ElMessage.error('删除图书失败');
+  } finally {
+    loading.value = false;
   }
 }
 
-async function loadBooks() {
-  try {
-    const response = await axios.get('http://localhost:3000/api/books', {
-      headers: { Authorization: `Bearer ${authStore.token}` }
-    });
-    books.value = response.data;
-  } catch (error) {
-    console.error('获取图书列表失败:', error);
-  }
+// 重置图书表单
+function resetBookForm() {
+  bookForm.id = null;
+  bookForm.title = '';
+  bookForm.author = '';
+  bookForm.category = '';
+  bookForm.price = 0;
+  bookForm.stock = 0;
+  bookForm.description = '';
+  bookForm.image_url = '';
 }
 
-function editBook(book) {
-  isEdit.value = true;
-  // 创建深拷贝避免直接修改原对象
-  bookForm.value = JSON.parse(JSON.stringify(book));
-  imageFile.value = null;
-  dialogVisible.value = true;
-  
-  // 确保对话框显示后更新表单状态
-  nextTick(() => {
-    if (bookFormRef.value) {
-      bookFormRef.value.clearValidate();
-    }
-  });
-}
-
-function handleImageChange(file) {
-  console.log('图片变更:', file);
-  
-  // 验证图片类型
-  const isImage = file.raw.type.startsWith('image/');
-  if (!isImage) {
-    ElMessage.error('只能上传图片文件!');
-    imageFile.value = null;
-    return false;
-  }
-  
-  // 验证图片大小
-  const isLt5M = file.raw.size / 1024 / 1024 < 5;
-  if (!isLt5M) {
-    ElMessage.error('图片大小不能超过5MB!');
-    imageFile.value = null;
-    return false;
-  }
-  
-  imageFile.value = file;
-  
-  // 确保文件对象有URL属性用于预览
-  if (file && !file.url && file.raw) {
-    console.log('创建预览URL:', file.raw.name, file.raw.type, file.raw.size);
-    file.url = URL.createObjectURL(file.raw);
-  }
-  
-  return true;
-}
-
-function handleExceed() {
-  ElMessage.warning('只能上传一张图片');
-}
-
-function handleRemove(file) {
-  console.log('删除图片:', file);
-  imageFile.value = null;
-  return true;
-}
-
-function previewImage(file) {
-  imagePreviewUrl.value = file.url;
-  imagePreviewVisible.value = true;
-}
-
-function previewCurrentImage() {
-  imagePreviewUrl.value = getImageUrl(bookForm.value.image_url);
-  imagePreviewVisible.value = true;
-}
-
-function getImageUrl(url) {
-  if (!url) return '';
-  if (url.startsWith('http')) return url;
-  return `http://localhost:3000${url}`;
-}
-
-async function submitBook() {
-  // 表单验证
+// 提交图书表单
+async function submitBookForm() {
   if (!bookFormRef.value) return;
   
-  try {
-    await bookFormRef.value.validate();
-  } catch (error) {
-    ElMessage.warning('请正确填写表单信息');
-    return;
+  await bookFormRef.value.validate(async (valid) => {
+    if (!valid) {
+      console.error('表单验证失败');
+      return;
+    }
+    
+    submitting.value = true;
+    console.log('提交图书表单:', bookForm);
+    
+    try {
+      // 准备要发送的数据，确保包含所有必要字段
+      const bookData = {
+        title: bookForm.title,
+        author: bookForm.author,
+        category: bookForm.category,
+        price: bookForm.price,
+        stock: bookForm.stock,
+        description: bookForm.description || '',
+        image_url: bookForm.image_url
+      };
+      
+      if (isEditMode.value) {
+        // 更新图书
+        console.log(`更新图书 ${bookForm.id}:`, bookData);
+        const response = await axios.put(`${apiUrl}/api/books/${bookForm.id}`, bookData);
+        console.log('更新图书响应:', response.data);
+        ElMessage.success('更新成功');
+      } else {
+        // 添加图书
+        console.log('添加新图书:', bookData);
+        const response = await axios.post(`${apiUrl}/api/books`, bookData);
+        console.log('添加图书响应:', response.data);
+        ElMessage.success('添加成功');
+      }
+      bookDialogVisible.value = false;
+      fetchBooks();
+    } catch (error) {
+      console.error('提交图书表单失败:', error);
+      if (error.response) {
+        console.error('服务器响应:', error.response.status, error.response.data);
+        const errorMessage = error.response.data?.message || '操作失败，请重试';
+        ElMessage.error(errorMessage);
+      } else {
+        ElMessage.error('操作失败，请重试');
+      }
+    } finally {
+      submitting.value = false;
+    }
+  });
+}
+
+// 上传前检查
+function beforeUpload(file) {
+  const isImage = file.type.startsWith('image/');
+  const isLt2M = file.size / 1024 / 1024 < 2;
+  
+  if (!isImage) {
+    ElMessage.error('只能上传图片文件!');
+    return false;
   }
   
-  submitting.value = true;
+  if (!isLt2M) {
+    ElMessage.error('图片大小不能超过 2MB!');
+    return false;
+  }
   
-  try {
-    console.log('开始提交图书信息');
-    const formData = new FormData();
-    formData.append('title', bookForm.value.title);
-    formData.append('author', bookForm.value.author);
-    formData.append('price', bookForm.value.price);
-    formData.append('stock', bookForm.value.stock);
-    formData.append('description', bookForm.value.description);
-    
-    if (imageFile.value) {
-      console.log('上传新图片:', imageFile.value.name);
-      formData.append('image', imageFile.value.raw);
-    } else {
-      console.log('保留原图片:', bookForm.value.image_url);
+  return true;
+}
+
+// 处理封面上传成功
+function handleCoverUploadSuccess(response) {
+  console.log('封面上传成功:', response);
+  if (response && response.path) {
+    bookForm.image_url = response.path;
+    console.log('设置封面路径:', bookForm.image_url);
+  } else {
+    console.error('封面上传响应中缺少path字段:', response);
+  }
+  ElMessage.success('上传成功');
+}
+
+// 处理支付宝收款码上传成功
+function handleAlipayUploadSuccess(response) {
+  paymentSettings.alipayCode = response.path;
+  ElMessage.success('支付宝收款码上传成功');
+}
+
+// 处理微信收款码上传成功
+function handleWechatUploadSuccess(response) {
+  paymentSettings.wechatCode = response.path;
+  ElMessage.success('微信收款码上传成功');
+}
+
+// 处理上传错误
+function handleUploadError(error, file) {
+  console.error('上传失败:', error, file);
+  let errorMsg = '上传失败，请重试';
+  
+  if (error && error.response) {
+    try {
+      const response = JSON.parse(error.response);
+      errorMsg = response.message || errorMsg;
+    } catch (e) {
+      errorMsg = `上传失败: ${error.status || '未知错误'}`;
     }
-    
-    const apiUrl = isEdit.value 
-      ? `http://localhost:3000/api/books/${bookForm.value.id}`
-      : 'http://localhost:3000/api/books';
-    
-    console.log('请求URL:', apiUrl);
-    console.log('请求方法:', isEdit.value ? 'PUT' : 'POST');
-    
-    const headers = { 
-      Authorization: `Bearer ${authStore.token}`,
-      'Content-Type': 'multipart/form-data'
-    };
-    
-    console.log('请求头:', headers);
-    
-    if (isEdit.value) {
-      const response = await axios.put(apiUrl, formData, { headers });
-      console.log('更新成功，响应数据:', response.data);
-      ElMessage.success('图书信息更新成功');
-    } else {
-      const response = await axios.post(apiUrl, formData, { headers });
-      console.log('添加成功，响应数据:', response.data);
-      ElMessage.success('图书添加成功');
-    }
-    dialogVisible.value = false;
-    imageFile.value = null;
-    loadBooks();
-  } catch (error) {
-    console.error(isEdit.value ? '更新图书失败:' : '添加图书失败:', error);
-    
-    // 详细记录错误信息
-    if (error.response) {
-      console.error('错误状态码:', error.response.status);
-      console.error('错误响应数据:', error.response.data);
-      
-      // 显示更详细的错误信息
-      if (error.response.status === 403) {
-        ElMessage.error('权限不足，无法更新图书');
-      } else if (error.response.status === 404) {
-        ElMessage.error('图书不存在或无权限修改');
-      } else if (error.response.data && error.response.data.message) {
-        ElMessage.error(error.response.data.message);
-      } else {
-        ElMessage.error(isEdit.value ? '更新图书失败，服务器错误' : '添加图书失败，服务器错误');
-      }
-    } else if (error.request) {
-      // 请求已发送但没有收到响应
-      ElMessage.error('网络连接失败，请检查服务器是否正常运行');
-    } else {
-      // 请求设置时出现问题
-      ElMessage.error(isEdit.value ? `更新图书失败: ${error.message}` : `添加图书失败: ${error.message}`);
-    }
-  } finally {
-    submitting.value = false;
+  }
+  
+  ElMessage.error(errorMsg);
+}
+
+// 添加图片加载事件处理函数
+function handleImageLoaded(tag, path) {
+  console.log(`✅ 图片加载成功 [${tag}]:`, path);
+}
+
+function handleImageError(tag, path) {
+  console.error(`❌ 图片加载失败 [${tag}]:`, path);
+  console.error('完整URL:', getImageUrl(path));
+  
+  // 测试服务器静态资源路径
+  axios.get(`${apiUrl}/api/test-uploads`)
+    .then(response => {
+      console.log('上传目录测试结果:', response.data);
+    })
+    .catch(error => {
+      console.error('测试上传目录失败:', error);
+    });
+}
+
+// 监听标签页变化
+function handleTabChange() {
+  if (activeTab.value === 'books') {
+    fetchBooks();
+  } else if (activeTab.value === 'orders') {
+    fetchOrders();
+  } else if (activeTab.value === 'payment') {
+    fetchPaymentSettings();
   }
 }
 
+// 组件挂载时获取数据
 onMounted(() => {
-  loadBooks();
+  console.log('卖家组件已挂载');
+  
+  // 测试静态资源访问
+  console.log('测试静态资源访问...');
+  const testImageUrl = `${apiUrl}/uploads/test.jpg`;
+  console.log('测试图片URL:', testImageUrl);
+  
+  // 创建一个图片元素来测试
+  const testImg = new Image();
+  testImg.onload = () => console.log('✅ 测试图片加载成功:', testImageUrl);
+  testImg.onerror = () => console.error('❌ 测试图片加载失败:', testImageUrl);
+  testImg.src = testImageUrl;
+  
+  // 使用API检查静态路径
+  axios.get(`${apiUrl}/api/check-static-path`)
+    .then(response => {
+      console.log('静态路径检查结果:', response.data);
+    })
+    .catch(error => {
+      console.error('静态路径检查失败:', error);
+    });
+  
+  activeTab.value = 'books'; // 确保默认选中图书标签
+  fetchBooks();
+  fetchCategories();
+  
+  // 监听标签页变化
+  watch(activeTab, (newTab) => {
+    console.log('标签页切换到:', newTab);
+    handleTabChange();
+  });
 });
 </script>
 
 <style scoped>
 .seller-container {
   padding: 20px;
-  background-color: #f5f7fa;
-  min-height: 100vh;
 }
 
-.main-card {
-  border-radius: 8px;
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.1);
-  overflow: hidden;
-}
-
-.card-header {
+.tab-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background-color: #ffffff;
-  padding: 16px 20px;
-}
-
-.header-left {
-  display: flex;
-  align-items: center;
-}
-
-.header-icon {
-  font-size: 24px;
-  margin-right: 10px;
-  color: #409EFF;
-}
-
-.card-header-title {
-  font-size: 22px;
-  font-weight: 600;
-  color: #303133;
-}
-
-.logout-btn {
-  font-weight: 500;
-}
-
-.content-section {
-  padding: 20px;
-}
-
-.section-header {
-  margin-bottom: 24px;
-}
-
-.section-title {
-  font-size: 20px;
-  font-weight: 600;
-  color: #303133;
-  margin-bottom: 8px;
-}
-
-.section-desc {
-  color: #909399;
-  font-size: 14px;
-  margin-bottom: 16px;
-}
-
-.toolbar {
-  display: flex;
-  align-items: center;
-  gap: 16px;
   margin-bottom: 20px;
 }
 
-.search-input {
-  max-width: 300px;
-}
-
-.add-book-btn {
-  font-weight: 500;
-}
-
-.data-table {
-  border-radius: 6px;
-  overflow: hidden;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
-}
-
-.book-title {
-  font-weight: 500;
-  color: #303133;
-  margin-bottom: 6px;
-}
-
-.book-desc {
-  font-size: 12px;
-  color: #909399;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.price {
-  color: #f56c6c;
-  font-weight: 600;
-}
-
-.book-form-dialog {
-  border-radius: 8px;
-}
-
-.book-form {
-  padding: 20px 0;
-}
-
-.form-row {
-  display: flex;
-  gap: 20px;
-  margin-bottom: 22px;
-}
-
-.form-col {
-  flex: 1;
-  margin-bottom: 0 !important;
-}
-
-.upload-item {
-  margin-top: 10px;
-}
-
-.upload-tip {
-  font-size: 12px;
-  color: #909399;
-  margin-top: 10px;
-}
-
-.current-image {
-  margin-top: 15px;
-  padding: 15px;
-  border-radius: 6px;
-  background-color: #f9fafc;
-  text-align: center;
-}
-
-.current-image p {
-  margin-bottom: 10px;
-  font-weight: 500;
-  color: #606266;
-}
-
-.preview-image {
-  max-width: 200px;
-  max-height: 280px;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: transform 0.3s ease;
-}
-
-.preview-image:hover {
-  transform: scale(1.05);
-}
-
-.preview-image-large {
-  max-width: 100%;
-  max-height: 70vh;
-  border-radius: 4px;
-}
-
-.preview-dialog .el-dialog__body {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  padding: 30px;
-}
-
-.image-preview-container {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
-
-.el-upload-dragger {
-  border-radius: 6px;
-  border: 2px dashed #dcdfe6;
-  transition: all 0.3s;
-}
-
-.el-upload-dragger:hover {
-  border-color: #409EFF;
-}
-
-.el-icon--upload {
-  font-size: 28px;
-  color: #8c939d;
-  margin-bottom: 10px;
-}
-
-.el-upload__text {
-  color: #606266;
-  margin-bottom: 5px;
-}
-
-.el-upload__text em {
-  color: #409EFF;
-  font-style: normal;
-}
-
-.el-upload-list__item-thumbnail {
-  width: 120px;
-  height: 160px;
-  object-fit: cover;
-  border-radius: 4px;
-}
-
-.book-cover-container {
-  width: 80px;
-  height: 120px;
-  overflow: hidden;
-  margin: 0 auto;
-  border: 1px solid #dcdfe6;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
-}
-
-.book-cover-container:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-
-.book-cover-image {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border-radius: 4px;
-}
-
-.book-cover-placeholder {
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #909399;
-}
-
-.book-cover-placeholder i {
-  font-size: 24px;
-  opacity: 0.7;
-}
-
-.remove-image-btn {
-  margin-top: 10px;
+.tab-header h2 {
+  margin: 0;
 }
 
 .empty-state {
-  margin: 40px 0;
+  text-align: center;
+  padding: 40px 0;
 }
 
-.dialog-footer {
+.book-cover {
+  width: 60px;
+  height: 80px;
   display: flex;
-  justify-content: flex-end;
-  padding-top: 10px;
+  justify-content: center;
+  align-items: center;
+  background-color: #f5f7fa;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.book-cover img,
+.book-cover .el-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.image-container {
+  width: 100%;
+  height: 100%;
+}
+
+.image-error {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  color: #909399;
+  font-size: 12px;
+}
+
+.image-error .el-icon {
+  font-size: 20px;
+  margin-bottom: 4px;
+}
+
+.book-cover-uploader,
+.payment-code-uploader {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.book-cover-preview,
+.payment-code-preview {
+  width: 150px;
+  height: 200px;
+  object-fit: cover;
+  border-radius: 4px;
+}
+
+.book-cover-placeholder,
+.payment-code-placeholder {
+  width: 150px;
+  height: 200px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  border: 1px dashed #d9d9d9;
+  border-radius: 4px;
+  background-color: #fafafa;
+  cursor: pointer;
+}
+
+.payment-code-placeholder {
+  width: 200px;
+  height: 200px;
+}
+
+.book-cover-placeholder:hover,
+.payment-code-placeholder:hover {
+  border-color: #409eff;
+}
+
+.payment-code-tips {
+  margin-top: 10px;
+  color: #909399;
+  font-size: 12px;
+}
+
+.payment-settings {
+  max-width: 600px;
+  margin: 0 auto;
 }
 
 @media (max-width: 768px) {
-  .seller-container {
-    padding: 10px;
+  .book-cover-preview,
+  .payment-code-preview,
+  .book-cover-placeholder,
+  .payment-code-placeholder {
+    width: 120px;
+    height: 160px;
   }
   
-  .toolbar {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  
-  .search-input {
-    max-width: none;
-    width: 100%;
-    margin-bottom: 10px;
-  }
-  
-  .form-row {
-    flex-direction: column;
-    gap: 0;
-  }
-  
-  .el-dialog {
-    width: 95% !important;
-    margin: 10px auto !important;
-  }
-  
-  .book-form {
-    padding: 10px 0;
+  .payment-code-preview,
+  .payment-code-placeholder {
+    width: 160px;
+    height: 160px;
   }
 }
 </style>

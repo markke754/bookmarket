@@ -1,164 +1,383 @@
 <template>
   <div class="buyer-container">
-    <el-card>
-      <template #header>
-        <div class="card-header">
-          <span class="card-header-title">图书商城</span>
-          <div>
-            <el-button type="primary" @click="showCart = true" icon="el-icon-shopping-cart-2">
-              购物车 <el-badge v-if="cartItems.length > 0" :value="cartItems.length" />
-            </el-button>
-            <el-button @click="authStore.logout(); $router.push('/login')" icon="el-icon-switch-button">
-              退出登录
-            </el-button>
+    <LoadingIndicator :loading="loading" text="加载中..." />
+    
+    <!-- 搜索和过滤区域 -->
+    <div class="search-filter-container">
+      <el-input
+        v-model="searchQuery"
+        placeholder="搜索书籍..."
+        prefix-icon="el-icon-search"
+        clearable
+        @input="fetchBooks"
+        class="search-input"
+      />
+      <el-select v-model="selectedCategory" placeholder="分类" @change="fetchBooks" class="filter-select">
+        <el-option label="全部" value="" />
+        <el-option v-for="category in categories" :key="category" :label="category" :value="category" />
+      </el-select>
+      <el-select v-model="sortOption" placeholder="排序" @change="fetchBooks" class="filter-select">
+        <el-option label="默认排序" value="default" />
+        <el-option label="价格从低到高" value="price_asc" />
+        <el-option label="价格从高到低" value="price_desc" />
+        <el-option label="最新上架" value="newest" />
+      </el-select>
+    </div>
+    
+    <!-- 书籍列表 -->
+    <div class="books-container">
+      <div v-if="books.length === 0 && !loading" class="no-books">
+        <el-empty description="没有找到符合条件的书籍" />
+      </div>
+      <div v-else class="books-grid">
+        <div v-for="book in books" :key="book.id" class="book-card">
+          <div class="book-image">
+            <img :src="getImageUrl(book.image)" :alt="book.title" />
           </div>
-        </div>
-      </template>
-      
-      <el-row :gutter="24">
-        <el-col v-for="book in books" :key="book.id" :xs="24" :sm="12" :md="8" :lg="6">
-          <el-card :body-style="{ padding: '0px' }" class="book-card" shadow="hover">
-            <div class="book-cover">
-              <img v-if="book.image_url" :src="getImageUrl(book.image_url)" class="book-cover-image" />
-              <div v-else class="book-cover-placeholder"></div>
-            </div>
-            <div class="book-info">
-              <h3 class="book-title">{{ book.title }}</h3>
-              <p class="book-author">作者：{{ book.author }}</p>
-              <p class="book-price">¥{{ book.price }}</p>
-              <p class="book-stock" :class="{ 'low-stock': book.stock < 5 }">
-                库存：{{ book.stock }}
-                <span v-if="book.stock < 5 && book.stock > 0" class="stock-warning">库存紧张</span>
-                <span v-if="book.stock <= 0" class="stock-empty">已售罄</span>
-              </p>
-              <el-button 
-                type="primary" 
-                @click="addToCart(book)" 
-                :disabled="book.stock <= 0"
-                class="add-to-cart-btn"
-              >
-                加入购物车
+          <div class="book-info">
+            <h3 class="book-title">{{ book.title }}</h3>
+            <p class="book-author">{{ book.author }}</p>
+            <p class="book-category">{{ book.category }}</p>
+            <div class="book-price-actions">
+              <span class="book-price">¥{{ book.price }}</span>
+              <el-button type="primary" size="small" @click="addToCart(book)" :disabled="!book.stock">
+                {{ book.stock ? '加入购物车' : '缺货' }}
               </el-button>
             </div>
-          </el-card>
-        </el-col>
-      </el-row>
-      
-      <el-empty v-if="books.length === 0" description="暂无图书" />
-      
-      <el-drawer v-model="showCart" title="购物车" size="30%" :with-header="true">
-        <template #header>
-          <div class="drawer-header">
-            <h3>购物车</h3>
-            <el-button v-if="cartItems.length > 0" type="text" @click="cartItems = []">清空</el-button>
+            <p class="book-stock">库存: {{ book.stock }}</p>
           </div>
-        </template>
-        
-        <el-empty v-if="cartItems.length === 0" description="购物车为空" />
-        
-        <el-table v-else :data="cartItems" style="width: 100%">
-          <el-table-column prop="title" label="书名" min-width="120" />
-          <el-table-column prop="price" label="单价" width="80">
-            <template #default="{ row }">
-              <span class="price">¥{{ row.price }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column prop="quantity" label="数量" width="100">
-            <template #default="{ row }">
-              <el-input-number v-model="row.quantity" :min="1" :max="row.stock" size="small" />
-            </template>
-          </el-table-column>
-          <el-table-column label="操作" width="80">
-            <template #default="{ row }">
-              <el-button type="danger" size="small" @click="removeFromCart(row)" icon="el-icon-delete" circle />
-            </template>
-          </el-table-column>
-        </el-table>
-        
-        <div class="cart-footer" v-if="cartItems.length > 0">
-          <div class="total">总计：<span class="total-price">¥{{ total }}</span></div>
-          <el-button type="success" @click="checkout" :disabled="cartItems.length === 0">
-            结算
-          </el-button>
         </div>
-      </el-drawer>
-    </el-card>
+      </div>
+    </div>
+    
+    <!-- 分页 -->
+    <div class="pagination-container" v-if="books.length > 0">
+      <el-pagination
+        background
+        layout="prev, pager, next"
+        :total="totalBooks"
+        :page-size="pageSize"
+        :current-page="currentPage"
+        @current-change="handlePageChange"
+      />
+    </div>
+    
+    <!-- 购物车抽屉 -->
+    <el-drawer
+      v-model="cartDrawerVisible"
+      title="购物车"
+      direction="rtl"
+      size="30%"
+      :before-close="handleCloseCart"
+    >
+      <ShoppingCart @checkout="openCheckoutDialog" />
+    </el-drawer>
+    
+    <!-- 结账对话框 -->
+    <el-dialog
+      v-model="checkoutDialogVisible"
+      title="结账"
+      width="50%"
+      :before-close="handleCloseCheckout"
+    >
+      <div class="checkout-container">
+        <div class="order-summary">
+          <h3>订单摘要</h3>
+          <div class="order-items">
+            <div v-for="(item, index) in cartItems" :key="index" class="order-item">
+              <span>{{ item.title }} x {{ item.quantity }}</span>
+              <span>¥{{ (item.price * item.quantity).toFixed(2) }}</span>
+            </div>
+          </div>
+          <div class="order-total">
+            <span>总计:</span>
+            <span>¥{{ total }}</span>
+          </div>
+        </div>
+        
+        <div class="payment-methods">
+          <h3>选择支付方式</h3>
+          <div class="payment-options">
+            <div
+              class="payment-option"
+              :class="{ active: selectedPaymentMethod === 'alipay' }"
+              @click="selectedPaymentMethod = 'alipay'"
+            >
+              <AlipayIcon size="36" />
+              <span>支付宝</span>
+            </div>
+            <div
+              class="payment-option"
+              :class="{ active: selectedPaymentMethod === 'wechat' }"
+              @click="selectedPaymentMethod = 'wechat'"
+            >
+              <WechatPayIcon size="36" />
+              <span>微信支付</span>
+            </div>
+          </div>
+        </div>
+        
+        <div class="payment-qrcode" v-if="selectedPaymentMethod && sellerPaymentCodes">
+          <h3>扫码支付</h3>
+          <div class="qrcode-container">
+            <img 
+              v-if="selectedPaymentMethod === 'alipay' && sellerPaymentCodes.alipay" 
+              :src="getImageUrl(sellerPaymentCodes.alipay)" 
+              alt="支付宝二维码" 
+            />
+            <img 
+              v-if="selectedPaymentMethod === 'wechat' && sellerPaymentCodes.wechat" 
+              :src="getImageUrl(sellerPaymentCodes.wechat)" 
+              alt="微信支付二维码" 
+            />
+            <div v-if="!canPay" class="no-payment-method">
+              卖家未提供此支付方式，请选择其他方式
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="checkoutDialogVisible = false">取消</el-button>
+          <el-button 
+            type="primary" 
+            @click="confirmPayment" 
+            :disabled="!canPay || paymentProcessing"
+            :loading="paymentProcessing"
+          >
+            确认支付
+          </el-button>
+        </span>
+      </template>
+    </el-dialog>
+    
+    <!-- 购物车按钮 -->
+    <div class="cart-button-container">
+      <el-badge :value="cartItems.length ? cartItems.length : ''" class="cart-badge">
+        <el-button 
+          type="primary" 
+          circle 
+          @click="cartDrawerVisible = true" 
+          class="cart-button"
+        >
+          <el-icon><ShoppingCart /></el-icon>
+        </el-button>
+      </el-badge>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, reactive, computed, onMounted } from 'vue';
+import { useCartStore } from '../stores/cart';
 import { useAuthStore } from '../stores/auth';
+import { ElMessage, ElMessageBox } from 'element-plus';
+import { ShoppingCart as ShoppingCartIcon } from '@element-plus/icons-vue';
+import ShoppingCart from '../components/ShoppingCart.vue';
+import LoadingIndicator from '../components/LoadingIndicator.vue';
+import AlipayIcon from '../components/icons/AlipayIcon.vue';
+import WechatPayIcon from '../components/icons/WechatPayIcon.vue';
 import axios from 'axios';
-import { ElMessage } from 'element-plus';
 
+const cartStore = useCartStore();
 const authStore = useAuthStore();
-const books = ref([]);
-const cartItems = ref([]);
-const showCart = ref(false);
+const cartItems = computed(() => cartStore.items);
 
+// 状态变量
+const books = ref([]);
+const categories = ref([]);
+const searchQuery = ref('');
+const selectedCategory = ref('');
+const sortOption = ref('default');
+const currentPage = ref(1);
+const pageSize = ref(12);
+const totalBooks = ref(0);
+const loading = ref(false);
+const cartDrawerVisible = ref(false);
+const checkoutDialogVisible = ref(false);
+const selectedPaymentMethod = ref('alipay');
+const sellerPaymentCodes = ref(null);
+const selectedSeller = ref(null);
+const paymentProcessing = ref(false);
+
+// 计算属性
 const total = computed(() => {
-  return cartItems.value.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  return cartItems.value.reduce((sum, item) => sum + (item.price * item.quantity), 0).toFixed(2);
 });
 
-function getImageUrl(url) {
-  if (!url) return '';
-  if (url.startsWith('http')) return url;
-  return `http://localhost:3000${url}`;
+const canPay = computed(() => {
+  if (!sellerPaymentCodes.value || !selectedPaymentMethod.value) return false;
+  
+  if (selectedPaymentMethod.value === 'alipay') {
+    return !!sellerPaymentCodes.value.alipay;
+  } else if (selectedPaymentMethod.value === 'wechat') {
+    return !!sellerPaymentCodes.value.wechat;
+  }
+  
+  return false;
+});
+
+// 获取图片URL
+function getImageUrl(image) {
+  if (!image) return '';
+  if (image.startsWith('http')) return image;
+  return `${import.meta.env.VITE_API_URL}/${image}`;
 }
 
-async function loadBooks() {
+// 获取书籍列表
+async function fetchBooks() {
+  loading.value = true;
   try {
-    const response = await axios.get('http://localhost:3000/api/books', {
-      headers: { Authorization: `Bearer ${authStore.token}` }
-    });
-    books.value = response.data;
-  } catch (error) {
-    console.error('获取图书列表失败:', error);
-  }
-}
-
-function addToCart(book) {
-  const existingItem = cartItems.value.find(item => item.id === book.id);
-  if (existingItem) {
-    existingItem.quantity++;
-  } else {
-    cartItems.value.push({
-      ...book,
-      quantity: 1
-    });
-  }
-  ElMessage.success('已添加到购物车');
-}
-
-function removeFromCart(item) {
-  const index = cartItems.value.indexOf(item);
-  if (index > -1) {
-    cartItems.value.splice(index, 1);
-  }
-}
-
-async function checkout() {
-  try {
-    for (const item of cartItems.value) {
-      await axios.post('http://localhost:3000/api/orders', {
-        book_id: item.id,
-        quantity: item.quantity
-      }, {
-        headers: { Authorization: `Bearer ${authStore.token}` }
-      });
+    // 输出API URL，便于调试
+    const url = `${import.meta.env.VITE_API_URL}/api/books?page=${currentPage.value}&limit=${pageSize.value}`;
+    console.log('正在请求图书数据，URL:', url);
+    
+    if (searchQuery.value) {
+      url += `&search=${encodeURIComponent(searchQuery.value)}`;
     }
-    cartItems.value = [];
-    showCart.value = false;
-    ElMessage.success('订单创建成功');
-    loadBooks();
+    
+    if (selectedCategory.value) {
+      url += `&category=${encodeURIComponent(selectedCategory.value)}`;
+    }
+    
+    if (sortOption.value !== 'default') {
+      url += `&sort=${encodeURIComponent(sortOption.value)}`;
+    }
+    
+    const response = await axios.get(url);
+    console.log('获取图书响应:', response.data);
+    
+    books.value = response.data.books || [];
+    totalBooks.value = response.data.total || 0;
+    
+    // 如果是第一次加载，获取所有分类
+    if (categories.value.length === 0) {
+      fetchCategories();
+    }
   } catch (error) {
-    ElMessage.error('订单创建失败');
+    console.error('获取书籍失败，详细错误:', error);
+    if (error.response) {
+      console.error('服务器响应:', error.response.status, error.response.data);
+    } else if (error.request) {
+      console.error('未收到响应，请检查API服务是否运行');
+    } else {
+      console.error('请求配置错误:', error.message);
+    }
+    ElMessage.error(`获取图书列表失败: ${error.message || '未知错误'}`);
+    books.value = []; // 确保在出错时设置为空数组
+  } finally {
+    // 确保无论如何都重置loading状态
+    loading.value = false;
+    console.log('图书加载状态已重置，loading =', loading.value);
   }
 }
 
+// 获取所有分类
+async function fetchCategories() {
+  try {
+    const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/books/categories`);
+    categories.value = response.data.categories;
+  } catch (error) {
+    console.error('获取分类失败:', error);
+  }
+}
+
+// 处理分页变化
+function handlePageChange(page) {
+  currentPage.value = page;
+  fetchBooks();
+}
+
+// 添加到购物车
+function addToCart(book) {
+  cartStore.addItem(book);
+  ElMessage.success(`已将《${book.title}》添加到购物车`);
+}
+
+// 关闭购物车抽屉
+function handleCloseCart(done) {
+  done();
+}
+
+// 关闭结账对话框
+function handleCloseCheckout(done) {
+  if (paymentProcessing.value) {
+    ElMessageBox.confirm('支付处理中，确定要取消吗?', '提示', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    }).then(() => {
+      paymentProcessing.value = false;
+      done();
+    }).catch(() => {});
+  } else {
+    done();
+  }
+}
+
+// 打开结账对话框
+async function openCheckoutDialog() {
+  if (cartItems.value.length === 0) {
+    ElMessage.warning('购物车为空，无法结账');
+    return;
+  }
+  
+  loading.value = true;
+  try {
+    // 准备订单并获取卖家支付码
+    const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/orders/prepare`, {
+      items: cartItems.value
+    });
+    
+    sellerPaymentCodes.value = response.data.paymentCodes;
+    selectedSeller.value = response.data.seller;
+    checkoutDialogVisible.value = true;
+  } catch (error) {
+    console.error('准备订单失败:', error);
+    if (error.response && error.response.data && error.response.data.message) {
+      ElMessage.error(error.response.data.message);
+    } else {
+      ElMessage.error('准备订单失败，请稍后重试');
+    }
+  } finally {
+    loading.value = false;
+  }
+}
+
+// 确认支付
+async function confirmPayment() {
+  if (!canPay.value) {
+    ElMessage.warning('请选择有效的支付方式');
+    return;
+  }
+  
+  paymentProcessing.value = true;
+  try {
+    const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/orders/confirm`, {
+      sellerId: selectedSeller.value.id,
+      items: cartItems.value,
+      paymentMethod: selectedPaymentMethod.value
+    });
+    
+    ElMessage.success('支付成功！');
+    checkoutDialogVisible.value = false;
+    cartStore.clearCart();
+  } catch (error) {
+    console.error('支付确认失败:', error);
+    if (error.response && error.response.data && error.response.data.message) {
+      ElMessage.error(error.response.data.message);
+    } else {
+      ElMessage.error('支付确认失败，请稍后重试');
+    }
+  } finally {
+    paymentProcessing.value = false;
+  }
+}
+
+// 组件挂载时获取书籍列表
 onMounted(() => {
-  loadBooks();
+  fetchBooks();
 });
 </script>
 
@@ -331,5 +550,368 @@ onMounted(() => {
   .el-drawer {
     width: 80% !important;
   }
+}
+
+.checkout-dialog {
+  border-radius: 8px;
+}
+
+.checkout-content {
+  padding: 10px 0;
+}
+
+.order-summary {
+  margin-bottom: 30px;
+  border-bottom: 1px solid #ebeef5;
+  padding-bottom: 15px;
+}
+
+.summary-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 15px;
+  color: #303133;
+}
+
+.summary-items {
+  margin-bottom: 15px;
+}
+
+.summary-item {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  color: #606266;
+}
+
+.summary-total {
+  display: flex;
+  justify-content: space-between;
+  padding: 15px 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.total-amount {
+  color: #f56c6c;
+  font-size: 20px;
+}
+
+.payment-methods {
+  margin-top: 20px;
+}
+
+.payment-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 15px;
+  color: #303133;
+}
+
+.payment-tabs {
+  border: 1px solid #ebeef5;
+  border-radius: 4px;
+  padding: 20px;
+}
+
+.payment-qrcode {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px 0;
+}
+
+.qrcode-image {
+  width: 200px;
+  height: 200px;
+  object-fit: contain;
+  margin-bottom: 15px;
+  border: 1px solid #ebeef5;
+  border-radius: 4px;
+  padding: 10px;
+}
+
+.scan-tip {
+  color: #606266;
+  margin-top: 10px;
+}
+
+.no-payment-code {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  color: #909399;
+  font-size: 16px;
+}
+
+@media (max-width: 768px) {
+  .qrcode-image {
+    width: 150px;
+    height: 150px;
+  }
+  
+  .checkout-dialog {
+    width: 95% !important;
+  }
+}
+
+/* 购物车样式 */
+.cart-content {
+  padding: 20px;
+  height: calc(100% - 40px);
+  display: flex;
+  flex-direction: column;
+}
+
+.empty-cart {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #909399;
+}
+
+.empty-cart i {
+  font-size: 50px;
+  margin-bottom: 20px;
+  color: #dcdfe6;
+}
+
+.empty-cart p {
+  margin-bottom: 20px;
+}
+
+.cart-items {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.cart-item {
+  display: flex;
+  align-items: center;
+  padding: 15px 0;
+  border-bottom: 1px solid #ebeef5;
+}
+
+.item-image {
+  width: 60px;
+  height: 80px;
+  margin-right: 15px;
+  overflow: hidden;
+  border-radius: 4px;
+  border: 1px solid #ebeef5;
+}
+
+.item-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.image-placeholder {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+}
+
+.item-info {
+  flex: 1;
+}
+
+.item-title {
+  font-weight: 500;
+  margin-bottom: 5px;
+}
+
+.item-price {
+  color: #f56c6c;
+  font-weight: 600;
+}
+
+.item-quantity {
+  margin: 0 15px;
+}
+
+.cart-footer {
+  margin-top: 20px;
+  padding-top: 15px;
+  border-top: 1px solid #ebeef5;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.cart-total {
+  font-size: 16px;
+}
+
+.total-price {
+  color: #f56c6c;
+  font-weight: 600;
+  font-size: 18px;
+  margin-left: 5px;
+}
+
+.search-filter-container {
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+}
+
+.search-input {
+  margin-right: 10px;
+}
+
+.filter-select {
+  margin-right: 10px;
+}
+
+.books-container {
+  margin-bottom: 20px;
+}
+
+.books-grid {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.book-card {
+  width: calc(33.33% - 20px);
+  margin: 10px;
+}
+
+.book-image {
+  height: 160px;
+  background-color: var(--background-dark);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid #dcdfe6;
+  border-radius: var(--border-radius-small);
+}
+
+.book-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.book-price-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.book-category {
+  color: var(--text-secondary);
+  margin: 5px 0;
+  font-size: 14px;
+}
+
+.pagination-container {
+  margin-top: 20px;
+  display: flex;
+  justify-content: center;
+}
+
+.cart-button-container {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+}
+
+.cart-button {
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: var(--border-radius-large);
+  font-size: 16px;
+  cursor: pointer;
+  transition: background-color var(--transition-normal);
+}
+
+.cart-button:hover {
+  background-color: var(--primary-hover);
+}
+
+.cart-badge {
+  margin-right: 10px;
+}
+
+.checkout-container {
+  padding: 20px;
+}
+
+.order-summary {
+  margin-bottom: 30px;
+  border-bottom: 1px solid #ebeef5;
+  padding-bottom: 15px;
+}
+
+.order-items {
+  margin-bottom: 15px;
+}
+
+.order-item {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  color: #606266;
+}
+
+.order-total {
+  display: flex;
+  justify-content: space-between;
+  padding: 15px 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.payment-methods {
+  margin-top: 20px;
+}
+
+.payment-options {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.payment-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+  padding: 10px;
+  border: 1px solid #ebeef5;
+  border-radius: 4px;
+  transition: background-color var(--transition-normal);
+}
+
+.payment-option:hover {
+  background-color: #f5f7fa;
+}
+
+.active {
+  background-color: #f5f7fa;
+}
+
+.qrcode-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px 0;
+}
+
+.no-payment-method {
+  color: #f56c6c;
+  font-size: 14px;
+  margin-top: 10px;
 }
 </style>

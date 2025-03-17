@@ -7,7 +7,7 @@
             <i class="el-icon-s-tools header-icon"></i>
             <span class="card-header-title">管理员控制台</span>
           </div>
-          <el-button type="danger" plain @click="authStore.logout(); $router.push('/login')" class="logout-btn">
+          <el-button type="danger" plain @click="handleLogout" class="logout-btn">
             <i class="el-icon-switch-button"></i> 退出登录
           </el-button>
         </div>
@@ -171,11 +171,14 @@ import { ref, onMounted, computed } from 'vue';
 import { useAuthStore } from '../stores/auth';
 import axios from 'axios';
 import { ElMessage } from 'element-plus';
+import { useRouter } from 'vue-router';
 
 const authStore = useAuthStore();
+const router = useRouter();
 const users = ref([]);
 const orders = ref([]);
 const registerLoading = ref(false);
+const logoutLoading = ref(false);
 const newAdmin = ref({
   username: '',
   password: '',
@@ -296,6 +299,26 @@ async function handleAdminRegister() {
     ElMessage.error('创建管理员账号失败');
   } finally {
     registerLoading.value = false;
+  }
+}
+
+// 处理退出登录
+function handleLogout() {
+  try {
+    console.log('开始退出登录处理...');
+    // 先清除存储和状态
+    authStore.logout();
+    ElMessage.success('退出登录成功');
+    console.log('状态已清除，准备跳转到登录页...');
+    
+    // 确保在下一个事件循环中进行路由跳转
+    setTimeout(() => {
+      router.push({ path: '/login', replace: true });
+      console.log('路由跳转到登录页面已执行');
+    }, 0);
+  } catch (error) {
+    console.error('退出登录失败:', error);
+    ElMessage.error('退出登录失败，请重试');
   }
 }
 </script>
