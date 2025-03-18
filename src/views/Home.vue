@@ -60,7 +60,7 @@
           <el-card :body-style="{ padding: '0px' }" class="book-card" shadow="hover">
             <div class="book-cover">
               <el-image 
-                :src="getImageUrl(book.image_url)" 
+                :src="getImageUrl(book.image_url || 'default-book.jpg')" 
                 fit="cover"
                 class="book-cover-image"
               >
@@ -164,8 +164,8 @@ const apiUrl = import.meta.env.VITE_API_URL;
 // 获取图片URL
 function getImageUrl(image) {
   if (!image) {
-    console.warn('图片路径为空');
-    return '';
+    console.warn('图片路径为空，使用默认图片');
+    return `${apiUrl}/uploads/default-book.jpg`;
   }
   
   console.log('处理图片路径:', image);
@@ -175,16 +175,19 @@ function getImageUrl(image) {
     return image;
   }
   
-  // 确保路径以/uploads开头
+  // 规范化路径
   let normalizedPath = image;
-  if (!normalizedPath.startsWith('/uploads') && !normalizedPath.startsWith('uploads')) {
-    normalizedPath = `/uploads/${normalizedPath.replace(/^\/+/, '')}`;
-  } else if (normalizedPath.startsWith('uploads/')) {
-    normalizedPath = `/${normalizedPath}`;
+  
+  // 移除开头的斜杠
+  normalizedPath = normalizedPath.replace(/^\/+/, '');
+  
+  // 确保路径以uploads开头
+  if (!normalizedPath.startsWith('uploads/')) {
+    normalizedPath = `uploads/${normalizedPath}`;
   }
   
   // 构建完整URL
-  const fullUrl = `${apiUrl}${normalizedPath}`;
+  const fullUrl = `${apiUrl}/${normalizedPath}`;
   console.log('构建的完整URL:', fullUrl);
   
   return fullUrl;

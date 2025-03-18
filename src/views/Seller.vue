@@ -18,23 +18,20 @@
           <el-table-column label="封面" width="100">
             <template #default="scope">
               <div class="book-cover">
-                <div v-if="scope.row.image_url" class="image-container">
-                  <el-image 
-                    :src="getImageUrl(scope.row.image_url)" 
-                    :preview-src-list="[getImageUrl(scope.row.image_url)]"
-                    fit="cover"
-                    @load="handleImageLoaded('表格图片', scope.row.image_url)" 
-                    @error="handleImageError('表格图片', scope.row.image_url)"
-                  >
-                    <template #error>
-                      <div class="image-error">
-                        <el-icon><Picture /></el-icon>
-                        <span>加载失败</span>
-                      </div>
-                    </template>
-                  </el-image>
-                </div>
-                <el-icon v-else><Picture /></el-icon>
+                <el-image 
+                  :src="getImageUrl(scope.row.image_url || 'default-book.jpg')" 
+                  :preview-src-list="[getImageUrl(scope.row.image_url || 'default-book.jpg')]"
+                  fit="cover"
+                  @load="handleImageLoaded('表格图片', scope.row.image_url)" 
+                  @error="handleImageError('表格图片', scope.row.image_url)"
+                >
+                  <template #error>
+                    <div class="image-error">
+                      <el-icon><Picture /></el-icon>
+                      <span>加载失败</span>
+                    </div>
+                  </template>
+                </el-image>
               </div>
             </template>
           </el-table-column>
@@ -279,36 +276,48 @@ const uploadHeaders = computed(() => ({
 function getImageUrl(image) {
   if (!image) {
     console.warn('获取图片URL失败: 路径为空');
-    return '';
+    const defaultUrl = `${apiUrl}/uploads/default-book.jpg`;
+    console.log('使用默认图片URL:', defaultUrl);
+    return defaultUrl;
   }
   
   console.log('处理图片路径:', image);
+  console.log('当前API URL:', apiUrl);
   
   // 如果已经是完整URL，直接返回
   if (image.startsWith('http')) {
+    console.log('使用完整URL:', image);
     return image;
   }
   
-  // 直接使用绝对路径访问
-  if (image.startsWith('/uploads/')) {
-    const fullUrl = `${apiUrl}${image}`;
-    console.log('构建的完整绝对URL:', fullUrl);
-    return fullUrl;
+  // 默认图片特殊处理
+  if (image === 'default-book.jpg') {
+    const defaultUrl = `${apiUrl}/uploads/default-book.jpg`;
+    console.log('使用默认图片URL:', defaultUrl);
+    return defaultUrl;
   }
   
-  // 确保路径以/uploads开头
+  // 规范化路径
   let normalizedPath = image;
-  if (!normalizedPath.startsWith('/uploads') && !normalizedPath.startsWith('uploads')) {
-    normalizedPath = `/uploads/${normalizedPath.replace(/^\/+/, '')}`;
-  } else if (normalizedPath.startsWith('uploads/')) {
-    normalizedPath = `/${normalizedPath}`;
+  
+  // 移除开头的斜杠
+  normalizedPath = normalizedPath.replace(/^\/+/, '');
+  
+  // 确保路径以uploads开头
+  if (!normalizedPath.startsWith('uploads/')) {
+    normalizedPath = `uploads/${normalizedPath}`;
   }
+  
+  // 添加开头的斜杠
+  normalizedPath = `/${normalizedPath}`;
+  
+  console.log('规范化后的路径:', normalizedPath);
   
   // 构建完整URL
   const fullUrl = `${apiUrl}${normalizedPath}`;
-  console.log('构建的完整URL:', fullUrl);
+  console.log('最终构建的URL:', fullUrl);
   
-  // 额外检查是否能够访问该图片
+  // 测试图片是否可访问
   testImageAccess(fullUrl, normalizedPath);
   
   return fullUrl;
@@ -316,6 +325,7 @@ function getImageUrl(image) {
 
 // 测试图片是否可访问
 function testImageAccess(url, originalPath) {
+  console.log('测试图片访问:', url);
   // 使用API检查图片路径
   axios.get(`${apiUrl}/api/check-static-path`, {
     params: { path: originalPath }
@@ -538,10 +548,11 @@ function beforeUpload(file) {
 
 // 处理封面上传成功
 function handleCoverUploadSuccess(response) {
-  console.log('封面上传成功:', response);
+  console.log('封面上传成功，完整响应:', response);
   if (response && response.path) {
     bookForm.image_url = response.path;
     console.log('设置封面路径:', bookForm.image_url);
+    console.log('构建的完整URL:', getImageUrl(bookForm.image_url));
   } else {
     console.error('封面上传响应中缺少path字段:', response);
   }

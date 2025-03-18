@@ -33,7 +33,7 @@
         <div v-for="book in books" :key="book.id" class="book-card">
           <div class="book-image">
             <el-image 
-              :src="getImageUrl(book.image_url)" 
+              :src="getImageUrl(book.image_url || 'default-book.jpg')" 
               fit="cover"
               class="book-cover-image"
             >
@@ -243,17 +243,27 @@ function getImageUrl(image) {
     return image;
   }
   
-  // 确保路径以/uploads开头
+  // 默认图片特殊处理
+  if (image === 'default-book.jpg') {
+    return `${import.meta.env.VITE_API_URL}/uploads/default-book.jpg`;
+  }
+  
+  // 规范化路径
   let normalizedPath = image;
-  if (!normalizedPath.startsWith('/uploads') && !normalizedPath.startsWith('uploads')) {
-    normalizedPath = `/uploads/${normalizedPath.replace(/^\/+/, '')}`;
-  } else if (normalizedPath.startsWith('uploads/')) {
-    normalizedPath = `/${normalizedPath}`;
+  
+  // 移除开头的斜杠
+  normalizedPath = normalizedPath.replace(/^\/*/, '');
+  
+  // 确保路径以uploads开头
+  if (!normalizedPath.startsWith('uploads/')) {
+    normalizedPath = `uploads/${normalizedPath}`;
+  } else if (normalizedPath.startsWith('/uploads/')) {
+    normalizedPath = normalizedPath.substring(1); // 移除开头的斜杠
   }
   
   // 构建完整URL
   const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-  const fullUrl = `${baseUrl}${normalizedPath}`;
+  const fullUrl = `${baseUrl}/${normalizedPath}`;
   console.log('构建的完整URL:', fullUrl);
   
   return fullUrl;
@@ -860,27 +870,39 @@ onMounted(() => {
 
 .cart-button-container {
   position: fixed;
-  bottom: 20px;
-  right: 20px;
+  bottom: 30px;
+  right: 30px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .cart-button {
   background-color: var(--primary-color);
   color: white;
+  width: 56px;
+  height: 56px;
   border: none;
-  padding: 10px 20px;
-  border-radius: var(--border-radius-large);
-  font-size: 16px;
-  cursor: pointer;
-  transition: background-color var(--transition-normal);
+  border-radius: 50%;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  transition: transform 0.3s, background-color 0.3s;
 }
 
 .cart-button:hover {
   background-color: var(--primary-hover);
+  transform: scale(1.05);
 }
 
 .cart-badge {
-  margin-right: 10px;
+  margin-right: 0;
+}
+
+.cart-badge :deep(.el-badge__content) {
+  z-index: 1001;
 }
 
 .checkout-container {

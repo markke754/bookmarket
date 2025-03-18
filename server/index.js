@@ -216,6 +216,33 @@ app.get('/api/test-uploads', (req, res) => {
     res.json(directories);
 });
 
+// 测试静态文件访问
+app.get('/test-static', (req, res) => {
+    console.log('测试静态文件访问');
+    console.log('上传目录:', uploadsDir);
+    console.log('目录是否存在:', fs.existsSync(uploadsDir));
+    
+    const files = fs.readdirSync(uploadsDir).map(file => {
+        const filePath = path.join(uploadsDir, file);
+        const stats = fs.statSync(filePath);
+        console.log(`文件: ${file}, 路径: ${filePath}, 大小: ${stats.size}, 权限: ${stats.mode}`);
+        return {
+            name: file,
+            path: filePath,
+            size: stats.size,
+            isDirectory: stats.isDirectory(),
+            lastModified: stats.mtime,
+            permissions: stats.mode
+        };
+    });
+    
+    res.json({
+        message: '静态文件测试',
+        uploadsDir,
+        files
+    });
+});
+
 // 404错误处理
 app.use(notFoundHandler);
 
