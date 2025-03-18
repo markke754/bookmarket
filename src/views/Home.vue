@@ -1,15 +1,59 @@
 <template>
   <div class="home-container">
+    <div class="top-bar">
+      <div class="logo">
+        <router-link to="/">
+          <img src="../assets/logo.png" alt="图书商城" />
+          <h1>图书商城</h1>
+        </router-link>
+      </div>
+      <div class="nav-links">
+        <div class="links">
+          <router-link to="/">首页</router-link>
+          <router-link to="/about">关于我们</router-link>
+          <router-link to="/help">帮助中心</router-link>
+        </div>
+        <div class="auth-links" v-if="!isLoggedIn">
+          <router-link to="/login">登录</router-link>
+          <router-link to="/register" class="register-link">注册</router-link>
+        </div>
+        <div class="user-info" v-else>
+          <el-dropdown trigger="click" @command="handleCommand">
+            <div class="user-dropdown">
+              <span class="username">{{ username }}</span>
+              <el-icon><ArrowDown /></el-icon>
+            </div>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="dashboard">
+                  <el-icon><HomeFilled /></el-icon>
+                  <span>进入{{ userRoleText }}中心</span>
+                </el-dropdown-item>
+                <el-dropdown-item command="logout">
+                  <el-icon><SwitchButton /></el-icon>
+                  <span>退出登录</span>
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </div>
+      </div>
+    </div>
     <div class="hero-section">
       <div class="hero-content">
         <h1 class="hero-title">欢迎来到图书商城</h1>
         <p class="hero-subtitle">发现、购买和销售您喜爱的图书</p>
-        <div class="hero-buttons">
+        <div class="hero-buttons" v-if="!isLoggedIn">
           <router-link to="/login">
             <el-button type="primary" size="large">立即登录</el-button>
           </router-link>
           <router-link to="/register">
             <el-button size="large">注册账号</el-button>
+          </router-link>
+        </div>
+        <div class="hero-buttons" v-else>
+          <router-link :to="'/' + userRole">
+            <el-button type="primary" size="large">进入{{ userRoleText }}中心</el-button>
           </router-link>
         </div>
       </div>
@@ -81,7 +125,7 @@
               </div>
               <el-button 
                 type="primary" 
-                @click="promptLogin"
+                @click="viewBookDetail(book.id)"
                 :disabled="book.stock <= 0"
                 class="view-book-btn"
               >
@@ -96,11 +140,18 @@
     </div>
     
     <div class="cta-section">
-      <div class="cta-content">
+      <div class="cta-content" v-if="!isLoggedIn">
         <h2>准备好开始了吗？</h2>
         <p>立即注册账号，开始您的图书之旅</p>
         <router-link to="/register">
           <el-button type="primary" size="large">立即注册</el-button>
+        </router-link>
+      </div>
+      <div class="cta-content" v-else>
+        <h2>开始您的图书之旅</h2>
+        <p>浏览更多图书，享受阅读的乐趣</p>
+        <router-link :to="'/' + userRole">
+          <el-button type="primary" size="large">进入{{ userRoleText }}中心</el-button>
         </router-link>
       </div>
     </div>
@@ -150,9 +201,12 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import axios from 'axios';
-import { ShoppingBag, Goods, Money, Reading, Picture } from '@element-plus/icons-vue';
+import { ShoppingBag, Goods, Money, Reading, Picture, ArrowDown, HomeFilled, SwitchButton } from '@element-plus/icons-vue';
+import { useAuthStore } from '../stores/auth';
+import { useRouter } from 'vue-router';
+import { ElMessageBox, ElMessage } from 'element-plus';
 
 const books = ref([]);
 const loading = ref(false);
@@ -160,6 +214,8 @@ const showGuide = ref(false);
 const showLoginPrompt = ref(false);
 const booksSection = ref(null);
 const apiUrl = import.meta.env.VITE_API_URL;
+const authStore = useAuthStore();
+const router = useRouter();
 
 // 获取图片URL
 function getImageUrl(image) {
@@ -206,14 +262,55 @@ async function loadBooks() {
   }
 }
 
-// 提示用户登录
-function promptLogin() {
-  showLoginPrompt.value = true;
+// 查看图书详情
+function viewBookDetail(bookId) {
+  if (isLoggedIn.value) {
+    // 已登录，直接跳转到详情页
+    router.push(`/book/${bookId}`);
+  } else {
+    // 未登录，显示登录提示
+    showLoginPrompt.value = true;
+  }
 }
 
 // 滚动到图书区域
 function scrollToBooks() {
   booksSection.value.scrollIntoView({ behavior: 'smooth' });
+}
+
+// 计算已登录用户信息
+const isLoggedIn = computed(() => authStore.isAuthenticated);
+const username = computed(() => authStore.user?.username || '');
+const userRole = computed(() => authStore.user?.role || '');
+const userRoleText = computed(() => {
+  switch (userRole.value) {
+    case 'buyer': return '买家';
+    case 'seller': return '卖家';
+    case 'admin': return '管理员';
+    default: return '用户';
+  }
+});
+
+// 处理下拉菜单命令
+function handleCommand(command) {
+  if (command === 'dashboard') {
+    router.push(`/${userRole.value}`);
+  } else if (command === 'logout') {
+    confirmLogout();
+  }
+}
+
+// 退出登录确认
+function confirmLogout() {
+  ElMessageBox.confirm('确定要退出登录吗?', '提示', {
+    confirmButtonText: '确定',
+    cancelButtonText: '取消',
+    type: 'warning'
+  }).then(() => {
+    authStore.logout();
+    ElMessage.success('已退出登录');
+    router.push('/login');
+  }).catch(() => {});
 }
 
 onMounted(() => {
@@ -224,6 +321,71 @@ onMounted(() => {
 <style scoped>
 .home-container {
   padding-bottom: 40px;
+}
+
+.top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 20px;
+  background-color: var(--primary-color);
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+}
+
+.logo img {
+  width: 40px;
+  height: 40px;
+  margin-right: 10px;
+}
+
+.logo h1 {
+  font-size: 1.5rem;
+  color: #fff;
+}
+
+.nav-links {
+  display: flex;
+  align-items: center;
+}
+
+.links {
+  display: flex;
+  gap: 20px;
+}
+
+.links a {
+  color: #fff;
+  text-decoration: none;
+  transition: color 0.3s;
+}
+
+.links a:hover {
+  color: var(--primary-hover);
+  text-decoration: underline;
+}
+
+.auth-links {
+  display: flex;
+  gap: 20px;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+}
+
+.user-dropdown {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.username {
+  margin-right: 5px;
 }
 
 .hero-section {

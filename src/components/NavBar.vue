@@ -13,7 +13,7 @@
           <template v-if="userRole === 'buyer'">
             <router-link to="/buyer" class="nav-item">
               <el-icon><ShoppingBag /></el-icon>
-              <span>图书商城</span>
+              <span>买家中心</span>
             </router-link>
             <router-link to="/buyer/orders" class="nav-item">
               <el-icon><List /></el-icon>
@@ -25,7 +25,7 @@
           <template v-else-if="userRole === 'seller'">
             <router-link to="/seller" class="nav-item">
               <el-icon><Goods /></el-icon>
-              <span>我的图书</span>
+              <span>卖家中心</span>
             </router-link>
             <router-link to="/seller/orders" class="nav-item">
               <el-icon><List /></el-icon>

@@ -33,10 +33,35 @@ const routes = [
     meta: { requiresAuth: true, role: 'seller', title: '图书商城 - 卖家中心' },
   },
   {
+    path: '/seller/orders',
+    name: 'SellerOrders',
+    component: () => import('../views/SellerOrders.vue'),
+    meta: { requiresAuth: true, role: 'seller', title: '图书商城 - 订单管理' },
+  },
+  {
+    path: '/seller/payment',
+    name: 'SellerPayment',
+    component: () => import('../views/SellerPayment.vue'),
+    meta: { requiresAuth: true, role: 'seller', title: '图书商城 - 支付设置' },
+  },
+  {
     path: '/buyer',
     name: 'Buyer',
     component: () => import('../views/Buyer.vue'),
     meta: { requiresAuth: true, role: 'buyer', title: '图书商城 - 买家中心' },
+  },
+  {
+    path: '/buyer/orders',
+    name: 'BuyerOrders',
+    component: () => import('../views/BuyerOrders.vue'),
+    meta: { requiresAuth: true, role: 'buyer', title: '图书商城 - 我的订单' },
+  },
+  {
+    path: '/book/:id',
+    name: 'BookDetail',
+    component: () => import('../views/BookDetail.vue'),
+    meta: { title: '图书商城 - 图书详情' },
+    props: true
   },
   {
     path: '/about',

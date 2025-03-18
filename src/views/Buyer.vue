@@ -49,13 +49,11 @@
             <h3 class="book-title">{{ book.title }}</h3>
             <p class="book-author">{{ book.author }}</p>
             <p v-if="book.category" class="book-category">{{ book.category }}</p>
-            <div class="book-price-actions">
-              <span class="book-price">¥{{ book.price }}</span>
-              <el-button type="primary" size="small" @click="addToCart(book)" :disabled="!book.stock">
-                {{ book.stock ? '加入购物车' : '缺货' }}
-              </el-button>
+            <p class="book-price">¥{{ book.price }}</p>
+            <div class="book-actions">
+              <el-button size="small" type="primary" @click="addToCart(book)">加入购物车</el-button>
+              <el-button size="small" @click="viewBookDetail(book.id)">查看详情</el-button>
             </div>
-            <p class="book-stock">库存: {{ book.stock }}</p>
           </div>
         </div>
       </div>
@@ -190,10 +188,12 @@ import LoadingIndicator from '../components/LoadingIndicator.vue';
 import AlipayIcon from '../components/icons/AlipayIcon.vue';
 import WechatPayIcon from '../components/icons/WechatPayIcon.vue';
 import axios from 'axios';
+import { useRouter } from 'vue-router';
 
 const cartStore = useCartStore();
 const authStore = useAuthStore();
 const cartItems = computed(() => cartStore.items);
+const router = useRouter();
 
 // 状态变量
 const books = ref([]);
@@ -423,6 +423,11 @@ async function confirmPayment() {
   } finally {
     paymentProcessing.value = false;
   }
+}
+
+// 查看书籍详情
+function viewBookDetail(bookId) {
+  router.push(`/book/${bookId}`);
 }
 
 // 组件挂载时获取书籍列表
@@ -885,16 +890,17 @@ onMounted(() => {
   height: 56px;
   border: none;
   border-radius: 50%;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.16);
   display: flex;
   justify-content: center;
   align-items: center;
   transition: transform 0.3s, background-color 0.3s;
+  cursor: pointer;
 }
 
 .cart-button:hover {
   background-color: var(--primary-hover);
-  transform: scale(1.05);
+  transform: scale(1.1);
 }
 
 .cart-badge {
