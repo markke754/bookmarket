@@ -32,12 +32,23 @@
       <div v-else class="books-grid">
         <div v-for="book in books" :key="book.id" class="book-card">
           <div class="book-image">
-            <img :src="getImageUrl(book.image)" :alt="book.title" />
+            <el-image 
+              :src="getImageUrl(book.image_url)" 
+              fit="cover"
+              class="book-cover-image"
+            >
+              <template #error>
+                <div class="image-error">
+                  <el-icon><Picture /></el-icon>
+                  <span>图片加载失败</span>
+                </div>
+              </template>
+            </el-image>
           </div>
           <div class="book-info">
             <h3 class="book-title">{{ book.title }}</h3>
             <p class="book-author">{{ book.author }}</p>
-            <p class="book-category">{{ book.category }}</p>
+            <p v-if="book.category" class="book-category">{{ book.category }}</p>
             <div class="book-price-actions">
               <span class="book-price">¥{{ book.price }}</span>
               <el-button type="primary" size="small" @click="addToCart(book)" :disabled="!book.stock">
@@ -220,30 +231,59 @@ const canPay = computed(() => {
 
 // 获取图片URL
 function getImageUrl(image) {
-  if (!image) return '';
-  if (image.startsWith('http')) return image;
-  return `${import.meta.env.VITE_API_URL}/${image}`;
+  if (!image) {
+    console.warn('图片路径为空');
+    return '';
+  }
+  
+  console.log('处理图片路径:', image);
+  
+  // 如果已经是完整URL，直接返回
+  if (image.startsWith('http')) {
+    return image;
+  }
+  
+  // 确保路径以/uploads开头
+  let normalizedPath = image;
+  if (!normalizedPath.startsWith('/uploads') && !normalizedPath.startsWith('uploads')) {
+    normalizedPath = `/uploads/${normalizedPath.replace(/^\/+/, '')}`;
+  } else if (normalizedPath.startsWith('uploads/')) {
+    normalizedPath = `/${normalizedPath}`;
+  }
+  
+  // 构建完整URL
+  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+  const fullUrl = `${baseUrl}${normalizedPath}`;
+  console.log('构建的完整URL:', fullUrl);
+  
+  return fullUrl;
 }
 
 // 获取书籍列表
 async function fetchBooks() {
   loading.value = true;
   try {
-    // 输出API URL，便于调试
-    const url = `${import.meta.env.VITE_API_URL}/api/books?page=${currentPage.value}&limit=${pageSize.value}`;
-    console.log('正在请求图书数据，URL:', url);
+    // 构建查询参数
+    const params = new URLSearchParams({
+      page: currentPage.value,
+      limit: pageSize.value
+    });
     
     if (searchQuery.value) {
-      url += `&search=${encodeURIComponent(searchQuery.value)}`;
+      params.append('search', searchQuery.value);
     }
     
     if (selectedCategory.value) {
-      url += `&category=${encodeURIComponent(selectedCategory.value)}`;
+      params.append('category', selectedCategory.value);
     }
     
     if (sortOption.value !== 'default') {
-      url += `&sort=${encodeURIComponent(sortOption.value)}`;
+      params.append('sort', sortOption.value);
     }
+    
+    // 构建完整的API URL
+    const url = `${import.meta.env.VITE_API_URL}/api/books?${params.toString()}`;
+    console.log('正在请求图书数据，URL:', url);
     
     const response = await axios.get(url);
     console.log('获取图书响应:', response.data);
@@ -913,5 +953,22 @@ onMounted(() => {
   color: #f56c6c;
   font-size: 14px;
   margin-top: 10px;
+}
+
+.image-error {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  color: #909399;
+  font-size: 12px;
+  background-color: #f5f7fa;
+}
+
+.image-error .el-icon {
+  font-size: 24px;
+  margin-bottom: 8px;
 }
 </style>

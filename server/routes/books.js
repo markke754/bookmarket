@@ -21,12 +21,85 @@ const uploadsDir = path.join(__dirname, '..', 'uploads');
 const router = express.Router();
 
 // 获取所有图书
+// 获取公开图书列表
+router.get('/public', async (req, res, next) => {
+    try {
+        console.log('获取公开图书列表');
+        const result = await db('SELECT id, title, author, price, stock, image_url, category FROM books WHERE stock > 0 ORDER BY created_at DESC');
+        res.json({ 
+            books: result.rows,
+            total: result.rows.length
+        });
+    } catch (error) {
+        console.error('获取公开图书失败:', error);
+        next(new AppError('获取公开图书失败', 500));
+    }
+});
+
+// 获取所有图书(支持分页和过滤)
 router.get('/', async (req, res, next) => {
     try {
-        const result = await db('SELECT * FROM books ORDER BY created_at DESC');
-        res.json(result.rows);
+        const { page = 1, limit = 10, search, category, sort } = req.query;
+        console.log('获取图书列表，参数:', { page, limit, search, category, sort });
+        
+        // 构建查询条件
+        let query = 'SELECT id, title, author, price, stock, image_url, category FROM books WHERE stock > 0';
+        const params = [];
+        
+        // 添加搜索条件
+        if (search) {
+            query += ' AND (title ILIKE $1 OR author ILIKE $1)';
+            params.push(`%${search}%`);
+        }
+        
+        // 添加分类过滤
+        if (category) {
+            query += params.length ? ' AND category = $' + (params.length + 1) : ' AND category = $1';
+            params.push(category);
+        }
+        
+        // 计算总数
+        const countQuery = query.replace('SELECT id, title, author, price, stock, image_url, category', 'SELECT COUNT(*)');
+        const countResult = await db(countQuery, params);
+        const total = parseInt(countResult.rows[0].count);
+        
+        // 添加排序
+        if (sort) {
+            switch(sort) {
+                case 'price_asc':
+                    query += ' ORDER BY price ASC';
+                    break;
+                case 'price_desc':
+                    query += ' ORDER BY price DESC';
+                    break;
+                case 'newest':
+                    query += ' ORDER BY created_at DESC';
+                    break;
+                default:
+                    query += ' ORDER BY created_at DESC';
+            }
+        } else {
+            query += ' ORDER BY created_at DESC';
+        }
+        
+        // 添加分页
+        const offset = (page - 1) * limit;
+        query += ' LIMIT $' + (params.length + 1) + ' OFFSET $' + (params.length + 2);
+        params.push(limit, offset);
+        
+        console.log('执行查询:', query, params);
+        const result = await db(query, params);
+        
+        res.json({
+            books: result.rows,
+            total: total,
+            page: parseInt(page),
+            limit: parseInt(limit),
+            pages: Math.ceil(total / limit)
+        });
     } catch (error) {
-        next(new AppError('获取图书列表失败', 500));
+        console.error('获取图书列表失败:', error);
+        next(new AppError('获取图书列表失败: ' + error.message, 500));
     }
 });
 

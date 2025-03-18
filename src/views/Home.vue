@@ -56,21 +56,29 @@
         <el-skeleton :rows="3" animated />
       </div>
       <el-row v-else :gutter="24">
-        <el-col v-for="book in books" :key="book.id" :xs="24" :sm="12" :md="8" :lg="6">
+        <el-col v-for="book in books.slice(0, 8)" :key="book.id" :xs="24" :sm="12" :md="8" :lg="6">
           <el-card :body-style="{ padding: '0px' }" class="book-card" shadow="hover">
             <div class="book-cover">
-              <img v-if="book.image" :src="getImageUrl(book.image)" class="book-cover-image" />
-              <div v-else class="book-cover-placeholder"></div>
+              <el-image 
+                :src="getImageUrl(book.image_url)" 
+                fit="cover"
+                class="book-cover-image"
+              >
+                <template #error>
+                  <div class="image-error">
+                    <el-icon><Picture /></el-icon>
+                    <span>图片加载失败</span>
+                  </div>
+                </template>
+              </el-image>
             </div>
             <div class="book-info">
               <h3 class="book-title">{{ book.title }}</h3>
               <p class="book-author">作者：{{ book.author }}</p>
-              <p class="book-price">¥{{ book.price }}</p>
-              <p class="book-stock" :class="{ 'low-stock': book.stock < 5 }">
-                库存：{{ book.stock }}
-                <span v-if="book.stock < 5 && book.stock > 0" class="stock-warning">库存紧张</span>
-                <span v-if="book.stock <= 0" class="stock-empty">已售罄</span>
-              </p>
+              <div class="book-price-stock">
+                <span class="book-price">¥{{ book.price }}</span>
+                <span class="book-stock" :class="{ 'low-stock': book.stock < 5 }">库存: {{ book.stock }}</span>
+              </div>
               <el-button 
                 type="primary" 
                 @click="promptLogin"
@@ -144,7 +152,7 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import axios from 'axios';
-import { ShoppingBag, Goods, Money, Reading } from '@element-plus/icons-vue';
+import { ShoppingBag, Goods, Money, Reading, Picture } from '@element-plus/icons-vue';
 
 const books = ref([]);
 const loading = ref(false);
@@ -155,9 +163,31 @@ const apiUrl = import.meta.env.VITE_API_URL;
 
 // 获取图片URL
 function getImageUrl(image) {
-  if (!image) return '';
-  if (image.startsWith('http')) return image;
-  return `${apiUrl}/${image}`;
+  if (!image) {
+    console.warn('图片路径为空');
+    return '';
+  }
+  
+  console.log('处理图片路径:', image);
+  
+  // 如果已经是完整URL，直接返回
+  if (image.startsWith('http')) {
+    return image;
+  }
+  
+  // 确保路径以/uploads开头
+  let normalizedPath = image;
+  if (!normalizedPath.startsWith('/uploads') && !normalizedPath.startsWith('uploads')) {
+    normalizedPath = `/uploads/${normalizedPath.replace(/^\/+/, '')}`;
+  } else if (normalizedPath.startsWith('uploads/')) {
+    normalizedPath = `/${normalizedPath}`;
+  }
+  
+  // 构建完整URL
+  const fullUrl = `${apiUrl}${normalizedPath}`;
+  console.log('构建的完整URL:', fullUrl);
+  
+  return fullUrl;
 }
 
 // 加载图书数据
@@ -490,5 +520,29 @@ onMounted(() => {
   .cta-section {
     padding: 40px 20px;
   }
+}
+
+.image-error {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  color: #909399;
+  font-size: 12px;
+  background-color: #f5f7fa;
+}
+
+.image-error .el-icon {
+  font-size: 24px;
+  margin-bottom: 8px;
+}
+
+.book-price-stock {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
 }
 </style>
