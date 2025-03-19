@@ -1,44 +1,6 @@
 <template>
   <div class="home-container">
-    <div class="top-bar">
-      <div class="logo">
-        <router-link to="/">
-          <img src="../assets/logo.png" alt="图书商城" />
-          <h1>图书商城</h1>
-        </router-link>
-      </div>
-      <div class="nav-links">
-        <div class="links">
-          <router-link to="/">首页</router-link>
-          <router-link to="/about">关于我们</router-link>
-          <router-link to="/help">帮助中心</router-link>
-        </div>
-        <div class="auth-links" v-if="!isLoggedIn">
-          <router-link to="/login">登录</router-link>
-          <router-link to="/register" class="register-link">注册</router-link>
-        </div>
-        <div class="user-info" v-else>
-          <el-dropdown trigger="click" @command="handleCommand">
-            <div class="user-dropdown">
-              <span class="username">{{ username }}</span>
-              <el-icon><ArrowDown /></el-icon>
-            </div>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item command="dashboard">
-                  <el-icon><HomeFilled /></el-icon>
-                  <span>进入{{ userRoleText }}中心</span>
-                </el-dropdown-item>
-                <el-dropdown-item command="logout">
-                  <el-icon><SwitchButton /></el-icon>
-                  <span>退出登录</span>
-                </el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
-        </div>
-      </div>
-    </div>
+  
     <div class="hero-section">
       <div class="hero-content">
         <h1 class="hero-title">欢迎来到图书商城</h1>
