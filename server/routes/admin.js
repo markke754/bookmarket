@@ -193,4 +193,108 @@ router.get('/stats', authenticateToken, async (req, res, next) => {
     }
 });
 
+// 发布公告（仅限管理员）
+router.post('/announcements', authenticateToken, async (req, res, next) => {
+    try {
+        if (req.user.role !== 'admin') {
+            return next(new AppError('只有管理员可以发布公告', 403));
+        }
+        
+        const { content } = req.body;
+        
+        if (!content || content.trim() === '') {
+            return next(new AppError('公告内容不能为空', 400));
+        }
+        
+        // 创建公告表（如果不存在）
+        await db(`
+            CREATE TABLE IF NOT EXISTS announcements (
+                id SERIAL PRIMARY KEY,
+                content TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                admin_id INTEGER REFERENCES users(id)
+            )
+        `);
+        
+        // 插入新公告
+        const result = await db(
+            'INSERT INTO announcements (content, admin_id) VALUES ($1, $2) RETURNING id, content, created_at',
+            [content, req.user.id]
+        );
+        
+        const announcement = result.rows[0];
+        res.status(201).json({ 
+            success: true,
+            message: '公告发布成功', 
+            announcement 
+        });
+    } catch (error) {
+        next(error);
+    }
+});
+
+// 获取所有公告
+router.get('/announcements', async (req, res, next) => {
+    try {
+        // 确保表存在
+        await db(`
+            CREATE TABLE IF NOT EXISTS announcements (
+                id SERIAL PRIMARY KEY,
+                content TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                admin_id INTEGER REFERENCES users(id)
+            )
+        `);
+        
+        const result = await db(`
+            SELECT a.id, a.content, a.created_at, u.username as admin_username
+            FROM announcements a
+            LEFT JOIN users u ON a.admin_id = u.id
+            ORDER BY a.created_at DESC
+        `);
+        
+        res.json(result.rows);
+    } catch (error) {
+        next(error);
+    }
+});
+
+// 删除用户（仅限管理员）
+router.delete('/users/:id', authenticateToken, async (req, res, next) => {
+    try {
+        if (req.user.role !== 'admin') {
+            return next(new AppError('只有管理员可以删除用户', 403));
+        }
+        
+        const { id } = req.params;
+        
+        // 确保不是在删除自己
+        if (parseInt(id) === req.user.id) {
+            return next(new AppError('不能删除自己的账号', 400));
+        }
+        
+        // 首先检查用户是否存在
+        const userResult = await db('SELECT * FROM users WHERE id = $1', [id]);
+        if (userResult.rows.length === 0) {
+            return next(new AppError('用户不存在', 404));
+        }
+        
+        // 检查用户角色，防止删除其他管理员
+        const user = userResult.rows[0];
+        if (user.role === 'admin' && req.user.id !== user.id) {
+            return next(new AppError('不能删除其他管理员账号', 403));
+        }
+        
+        // 删除用户
+        await db('DELETE FROM users WHERE id = $1', [id]);
+        
+        res.json({ 
+            success: true,
+            message: '用户已成功删除' 
+        });
+    } catch (error) {
+        next(error);
+    }
+});
+
 export default router; 

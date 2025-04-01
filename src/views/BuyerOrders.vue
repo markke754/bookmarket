@@ -61,8 +61,10 @@ import { ref, onMounted } from 'vue';
 import { ElMessage } from 'element-plus';
 import { Picture } from '@element-plus/icons-vue';
 import axios from 'axios';
+import { useAuthStore } from '../stores/auth';
 import LoadingIndicator from '../components/LoadingIndicator.vue';
 
+const authStore = useAuthStore();
 const apiUrl = import.meta.env.VITE_API_URL;
 const loading = ref(false);
 const orders = ref([]);
@@ -76,19 +78,133 @@ async function fetchOrders(page = 1) {
   loading.value = true;
   
   try {
-    const response = await axios.get(`${apiUrl}/api/buyer/orders`, {
+    console.log('正在获取买家订单，用户信息:', {
+      token存在: !!authStore.token,
+      tokenLength: authStore.token?.length,
+      isAuthenticated: authStore.isAuthenticated,
+      role: authStore.user?.role,
+      userId: authStore.user?.id
+    });
+    
+    // 确保用户已登录且token有效
+    if (!authStore.token || !authStore.isAuthenticated) {
+      console.log('检测到用户未登录或Token无效，尝试刷新认证状态');
+      await authStore.checkAuth();
+      
+      if (!authStore.isAuthenticated) {
+        throw new Error('用户未登录或会话已过期');
+      }
+    }
+    
+    // 确保用户是买家角色
+    if (authStore.user?.role !== 'buyer') {
+      ElMessage.error(`您的账户角色是 ${authStore.user?.role || '未知'}，需要买家角色才能查看订单`);
+      loading.value = false;
+      return;
+    }
+    
+    console.log('开始发送API请求获取订单');
+    const response = await axios.get(`${apiUrl}/api/orders/buyer`, {
       params: {
         page,
         limit: pageSize.value
+      },
+      headers: {
+        Authorization: `Bearer ${authStore.token}`
       }
     });
     
-    orders.value = response.data.orders || [];
-    totalOrders.value = response.data.total || 0;
-    totalPages.value = response.data.pages || 0;
+    console.log('获取订单列表响应:', response.data);
+    
+    // 初始化为空数组，确保视图正确更新
+    orders.value = [];
+    totalOrders.value = 0;
+    totalPages.value = 0;
+    
+    // 检查响应数据结构
+    if (response.data && typeof response.data === 'object') {
+      // 处理返回的订单列表
+      if (Array.isArray(response.data.orders)) {
+        orders.value = response.data.orders;
+      } else if (response.data.orders === null) {
+        console.log('服务器返回了null订单列表，处理为空数组');
+        orders.value = [];
+      }
+      
+      // 处理分页信息
+      if (typeof response.data.total === 'number') {
+        totalOrders.value = response.data.total;
+      }
+      
+      if (typeof response.data.pages === 'number') {
+        totalPages.value = response.data.pages;
+      }
+      
+      console.log('处理后的订单数据:', {
+        订单数量: orders.value.length,
+        总记录数: totalOrders.value,
+        总页数: totalPages.value
+      });
+    } else {
+      console.error('响应格式不正确:', response.data);
+    }
   } catch (error) {
     console.error('获取订单列表失败:', error);
-    ElMessage.error('获取订单列表失败');
+    console.error('详细错误信息:', {
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data,
+      headers: error.response?.headers,
+      message: error.message
+    });
+    
+    // 更精确的错误处理
+    if (error.response) {
+      // 服务器返回了错误
+      const status = error.response.status;
+      const errorData = error.response.data;
+      
+      // 如果是403错误，检查是否因为角色问题
+      if (status === 403) {
+        const currentRole = errorData?.currentRole;
+        if (currentRole) {
+          if (currentRole !== 'buyer') {
+            ElMessage.error(`权限错误: 您的账户角色是 ${currentRole}，但需要买家角色才能查看订单`);
+          } else {
+            // 如果角色是正确的buyer但仍403，可能是授权问题
+            ElMessage.error('授权验证失败，请尝试重新登录');
+          }
+        } else {
+          ElMessage.error('没有权限访问订单列表，请确认您是买家账号');
+        }
+      } else if (status === 401) {
+        // 401表示未认证
+        ElMessage.error('会话已过期，请重新登录');
+        // 重新登录后跳转回当前页面
+        authStore.logout();
+      } else if (status === 404) {
+        // 找不到资源
+        ElMessage.error('获取订单列表失败: 请求的资源不存在');
+      } else if (status === 500) {
+        // 服务器内部错误
+        ElMessage.error('服务器内部错误，请稍后重试');
+      } else if (errorData?.message) {
+        // 其他有消息的错误
+        ElMessage.error(errorData.message);
+      } else {
+        // 其他HTTP错误
+        ElMessage.error(`获取订单列表失败: HTTP错误 ${status}`);
+      }
+    } else if (error.request) {
+      // 发送请求但没有收到响应
+      ElMessage.error('服务器无响应，请检查网络连接');
+    } else {
+      // 请求设置出错
+      ElMessage.error('获取订单列表失败: ' + error.message);
+    }
+    
+    // 确保即使出错也设置空列表，避免显示旧数据
+    orders.value = [];
   } finally {
     loading.value = false;
   }

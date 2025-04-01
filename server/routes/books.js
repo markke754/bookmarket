@@ -405,4 +405,32 @@ router.post('/upload', authenticateToken, upload.single('file'), async (req, res
     }
 });
 
+// 验证图书是否存在
+router.post('/validate', async (req, res, next) => {
+    try {
+        const { bookIds } = req.body;
+        
+        if (!bookIds || !Array.isArray(bookIds) || bookIds.length === 0) {
+            return res.status(400).json({ message: '参数错误: 需要提供图书ID数组' });
+        }
+        
+        // 找出所有存在的图书ID
+        const result = await db('SELECT id FROM books WHERE id = ANY($1::int[])', [bookIds]);
+        
+        const existingIds = result.rows.map(row => row.id);
+        
+        // 找出不存在的图书ID
+        const invalidIds = bookIds.filter(id => !existingIds.includes(id));
+        
+        res.json({
+            valid: invalidIds.length === 0,
+            invalidBooks: invalidIds,
+            message: invalidIds.length > 0 ? '部分图书不存在' : '所有图书都存在'
+        });
+    } catch (error) {
+        console.error('验证图书失败:', error);
+        next(new AppError('验证图书失败: ' + error.message, 500));
+    }
+});
+
 export default router;

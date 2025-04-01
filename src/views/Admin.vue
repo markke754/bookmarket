@@ -13,8 +13,8 @@
         </div>
       </template>
       
-      <el-tabs type="border-card" class="admin-tabs">
-        <el-tab-pane label="管理员注册">
+      <el-tabs type="border-card" class="admin-tabs" v-model="activeTab">
+        <el-tab-pane label="管理员注册" name="register">
           <div class="tab-content">
             <h3 class="section-title">创建新管理员账号</h3>
             <p class="section-desc">仅限有权限的管理员创建新的管理员账号</p>
@@ -41,7 +41,7 @@
           </div>
         </el-tab-pane>
         
-        <el-tab-pane label="用户管理">
+        <el-tab-pane label="用户管理" name="users">
           <div class="tab-content">
             <h3 class="section-title">系统用户管理</h3>
             <p class="section-desc">查看和管理所有注册用户</p>
@@ -89,13 +89,89 @@
                   <i class="el-icon-time"></i> {{ formatDate(row.created_at) }}
                 </template>
               </el-table-column>
+              <el-table-column label="操作" width="120" fixed="right">
+                <template #default="{ row }">
+                  <el-button 
+                    type="danger" 
+                    size="small" 
+                    icon="el-icon-delete" 
+                    circle 
+                    title="删除用户"
+                    @click="confirmDeleteUser(row)"
+                    :disabled="row.id === authStore.user?.id || row.role === 'admin'"
+                  ></el-button>
+                </template>
+              </el-table-column>
             </el-table>
             
             <el-empty v-if="filteredUsers.length === 0" description="暂无用户数据" class="empty-state" />
           </div>
         </el-tab-pane>
         
-        <el-tab-pane label="订单管理">
+        <el-tab-pane label="公告管理" name="announcements">
+          <div class="tab-content">
+            <h3 class="section-title">系统公告管理</h3>
+            <p class="section-desc">发布和管理系统公告</p>
+            
+            <el-form @submit.prevent="publishAnnouncement" class="announcement-form">
+              <el-form-item label="公告内容">
+                <el-input 
+                  v-model="newAnnouncement.content" 
+                  type="textarea" 
+                  :rows="4" 
+                  placeholder="请输入公告内容..." 
+                  maxlength="1000" 
+                  show-word-limit
+                ></el-input>
+              </el-form-item>
+              
+              <el-form-item>
+                <el-button 
+                  type="primary" 
+                  native-type="submit" 
+                  :loading="announcementLoading" 
+                  class="publish-button"
+                >
+                  <i class="el-icon-s-promotion"></i> 发布公告
+                </el-button>
+              </el-form-item>
+            </el-form>
+            
+            <div class="announcement-list">
+              <h4 class="list-title">历史公告</h4>
+              
+              <el-timeline>
+                <el-timeline-item
+                  v-for="announcement in announcements"
+                  :key="announcement.id"
+                  :timestamp="formatDate(announcement.created_at)"
+                  placement="top"
+                  type="primary"
+                  size="large"
+                >
+                  <el-card class="announcement-card">
+                    <template #header>
+                      <div class="announcement-header">
+                        <span class="admin-name">
+                          <i class="el-icon-user"></i> {{ announcement.admin_username }}
+                        </span>
+                      </div>
+                    </template>
+                    <div class="announcement-content">{{ announcement.content }}</div>
+                  </el-card>
+                </el-timeline-item>
+              </el-timeline>
+              
+              <el-empty 
+                v-if="announcements.length === 0" 
+                description="暂无公告" 
+                class="empty-state"
+              />
+            </div>
+          </div>
+        </el-tab-pane>
+        
+        <el-tab-pane label="订单管理" name="orders">
           <div class="tab-content">
             <h3 class="section-title">订单管理系统</h3>
             <p class="section-desc">查看和管理所有用户订单</p>
@@ -161,22 +237,74 @@
             <el-empty v-if="filteredOrders.length === 0" description="暂无订单数据" class="empty-state" />
           </div>
         </el-tab-pane>
+        
+        <el-tab-pane label="图书管理" name="books">
+          <div class="tab-content">
+            <h3 class="section-title">图书管理系统</h3>
+            <p class="section-desc">查看和管理所有图书信息</p>
+            
+            <div class="table-toolbar">
+              <el-input placeholder="搜索图书..." v-model="bookSearchQuery" class="search-input" prefix-icon="el-icon-search"></el-input>
+              <el-select v-model="bookCategoryFilter" placeholder="分类筛选" clearable class="category-filter">
+                <el-option label="全部分类" value=""></el-option>
+                <el-option label="小说" value="小说"></el-option>
+                <el-option label="教育" value="教育"></el-option>
+                <el-option label="文学" value="文学"></el-option>
+                <el-option label="科技" value="科技"></el-option>
+              </el-select>
+            </div>
+            
+            <el-table 
+              :data="filteredBooks" 
+              style="width: 100%" 
+              border 
+              stripe
+              highlight-current-row
+              class="data-table"
+            >
+              <el-table-column prop="id" label="图书ID" width="80" />
+              <el-table-column prop="title" label="书名" min-width="180" />
+              <el-table-column prop="author" label="作者" width="120" />
+              <el-table-column prop="category" label="分类" width="100">
+                <template #default="{ row }">
+                  <el-tag size="small">{{ row.category || '未分类' }}</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column prop="price" label="价格" width="100">
+                <template #default="{ row }">
+                  <span class="price">¥{{ formatPrice(row.price) }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column prop="stock" label="库存" width="80" />
+              <el-table-column label="操作" width="150" fixed="right">
+                <template #default="{ row }">
+                  <el-button type="primary" size="small" icon="el-icon-view" circle title="查看详情"></el-button>
+                  <el-button type="danger" size="small" icon="el-icon-delete" circle title="删除图书"></el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+            
+            <el-empty v-if="filteredBooks.length === 0" description="暂无图书数据" class="empty-state" />
+          </div>
+        </el-tab-pane>
       </el-tabs>
     </el-card>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, watch } from 'vue';
 import { useAuthStore } from '../stores/auth';
 import axios from 'axios';
 import { ElMessage } from 'element-plus';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
 
 const authStore = useAuthStore();
 const router = useRouter();
+const route = useRoute();
 const users = ref([]);
 const orders = ref([]);
+const books = ref([]);
 const registerLoading = ref(false);
 const logoutLoading = ref(false);
 const newAdmin = ref({
@@ -185,11 +313,45 @@ const newAdmin = ref({
   email: ''
 });
 
+// 标签页激活名称
+const activeTab = ref('register');
+
+// 根据路由设置激活的标签页
+function setActiveTabFromRoute() {
+  if (route.meta.activeTab) {
+    activeTab.value = route.meta.activeTab;
+  } else if (route.path === '/admin') {
+    activeTab.value = 'register';
+  }
+}
+
+// 路由变化时更新标签页
+watch(() => route.path, () => {
+  setActiveTabFromRoute();
+});
+
+// 标签页变化时更新路由
+watch(activeTab, (newTabName) => {
+  if (newTabName === 'register' && route.path !== '/admin') {
+    router.push('/admin');
+  } else if (newTabName === 'users' && route.path !== '/admin/users') {
+    router.push('/admin/users');
+  } else if (newTabName === 'books' && route.path !== '/admin/books') {
+    router.push('/admin/books');
+  } else if (newTabName === 'orders' && route.path !== '/admin/orders') {
+    router.push('/admin/orders');
+  } else if (newTabName === 'announcements' && route.path !== '/admin/announcements') {
+    router.push('/admin/announcements');
+  }
+});
+
 // 搜索和筛选
 const userSearchQuery = ref('');
 const userRoleFilter = ref('');
 const orderSearchQuery = ref('');
 const orderStatusFilter = ref('');
+const bookSearchQuery = ref('');
+const bookCategoryFilter = ref('');
 
 // 计算筛选后的用户列表
 const filteredUsers = computed(() => {
@@ -211,6 +373,16 @@ const filteredOrders = computed(() => {
   });
 });
 
+// 计算筛选后的图书列表
+const filteredBooks = computed(() => {
+  return books.value.filter(book => {
+    const matchesSearch = (book.title && book.title.toLowerCase().includes(bookSearchQuery.value.toLowerCase())) ||
+                         (book.author && book.author.toLowerCase().includes(bookSearchQuery.value.toLowerCase()));
+    const matchesCategory = !bookCategoryFilter.value || book.category === bookCategoryFilter.value;
+    return matchesSearch && matchesCategory;
+  });
+});
+
 // 格式化日期
 function formatDate(dateString) {
   if (!dateString) return '';
@@ -229,21 +401,39 @@ function formatPrice(price) {
   return Number(price).toFixed(2);
 }
 
-onMounted(async () => {
+onMounted(() => {
+  // 设置初始标签页
+  setActiveTabFromRoute();
+  
+  // 加载数据
+  fetchData();
+});
+
+async function fetchData() {
   try {
     console.log('正在加载管理员数据...');
-    const [usersRes, ordersRes] = await Promise.all([
-      axios.get('http://localhost:3000/api/users', {
+    const [usersRes, ordersRes, booksRes, announcementsRes] = await Promise.all([
+      axios.get(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/admin/users`, {
         headers: { Authorization: `Bearer ${authStore.token}` }
       }),
-      axios.get('http://localhost:3000/api/orders', {
+      axios.get(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/admin/orders`, {
+        headers: { Authorization: `Bearer ${authStore.token}` }
+      }),
+      axios.get(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/books`, {
+        headers: { Authorization: `Bearer ${authStore.token}` }
+      }),
+      axios.get(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/admin/announcements`, {
         headers: { Authorization: `Bearer ${authStore.token}` }
       })
     ]);
     console.log('用户数据加载成功:', usersRes.data.length);
     console.log('订单数据加载成功:', ordersRes.data.length);
+    console.log('图书数据加载成功:', booksRes.data.length);
+    console.log('公告数据加载成功:', announcementsRes.data.length);
     users.value = usersRes.data;
     orders.value = ordersRes.data;
+    books.value = booksRes.data.books || [];
+    announcements.value = announcementsRes.data;
   } catch (error) {
     console.error('获取数据失败:', error);
     let errorMessage = '获取数据失败';
@@ -262,7 +452,7 @@ onMounted(async () => {
     
     ElMessage.error(errorMessage);
   }
-});
+}
 
 async function handleAdminRegister() {
   if (!newAdmin.value.username || !newAdmin.value.password || !newAdmin.value.email) {
@@ -287,7 +477,7 @@ async function handleAdminRegister() {
         email: ''
       };
       // 刷新用户列表
-      const usersRes = await axios.get('http://localhost:3000/api/users', {
+      const usersRes = await axios.get(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/admin/users`, {
         headers: { Authorization: `Bearer ${authStore.token}` }
       });
       users.value = usersRes.data;
@@ -319,6 +509,95 @@ function handleLogout() {
   } catch (error) {
     console.error('退出登录失败:', error);
     ElMessage.error('退出登录失败，请重试');
+  }
+}
+
+// 确认删除用户
+function confirmDeleteUser(user) {
+  ElMessageBox.confirm(
+    `确定要删除用户 ${user.username} 吗？此操作不可恢复。`,
+    '警告',
+    {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning',
+      closeOnClickModal: false
+    }
+  )
+    .then(() => {
+      deleteUser(user);
+    })
+    .catch(() => {
+      ElMessage.info('已取消删除');
+    });
+}
+
+// 删除用户
+async function deleteUser(user) {
+  try {
+    const response = await axios.delete(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/admin/users/${user.id}`, {
+      headers: { Authorization: `Bearer ${authStore.token}` }
+    });
+    
+    if (response.data.success) {
+      ElMessage.success('用户删除成功');
+      // 刷新用户列表
+      const usersRes = await axios.get(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/admin/users`, {
+        headers: { Authorization: `Bearer ${authStore.token}` }
+      });
+      users.value = usersRes.data;
+    } else {
+      ElMessage.error(response.data.message || '删除失败');
+    }
+  } catch (error) {
+    console.error('删除用户失败:', error);
+    let errorMessage = '删除用户失败';
+    
+    if (error.response && error.response.data && error.response.data.message) {
+      errorMessage = error.response.data.message;
+    }
+    
+    ElMessage.error(errorMessage);
+  }
+}
+
+// 发布公告
+const newAnnouncement = ref({
+  content: ''
+});
+const announcementLoading = ref(false);
+const announcements = ref([]);
+
+async function publishAnnouncement() {
+  if (!newAnnouncement.value.content) {
+    ElMessage.warning('请填写公告内容');
+    return;
+  }
+  
+  announcementLoading.value = true;
+  try {
+    const response = await axios.post('http://localhost:3000/api/admin/announcements', {
+      content: newAnnouncement.value.content
+    }, {
+      headers: { Authorization: `Bearer ${authStore.token}` }
+    });
+    
+    if (response.data.success) {
+      ElMessage.success('公告发布成功');
+      newAnnouncement.value.content = '';
+      // 刷新公告列表
+      const announcementsRes = await axios.get(`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/admin/announcements`, {
+        headers: { Authorization: `Bearer ${authStore.token}` }
+      });
+      announcements.value = announcementsRes.data;
+    } else {
+      ElMessage.error(response.data.message || '发布失败');
+    }
+  } catch (error) {
+    console.error('发布公告失败:', error);
+    ElMessage.error('发布公告失败');
+  } finally {
+    announcementLoading.value = false;
   }
 }
 </script>
@@ -419,7 +698,8 @@ function handleLogout() {
 }
 
 .role-filter,
-.status-filter {
+.status-filter,
+.category-filter {
   width: 140px;
 }
 
@@ -453,6 +733,55 @@ function handleLogout() {
   margin: 40px 0;
 }
 
+.announcement-form {
+  max-width: 800px;
+  margin: 20px 0;
+  padding: 24px;
+  background-color: #f9fafc;
+  border-radius: 6px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+}
+
+.publish-button {
+  padding: 10px 20px;
+  font-weight: 500;
+}
+
+.announcement-list {
+  margin-top: 30px;
+}
+
+.list-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #303133;
+  margin-bottom: 20px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #ebeef5;
+}
+
+.announcement-card {
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+  margin-bottom: 15px;
+}
+
+.announcement-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.admin-name {
+  font-weight: 600;
+  color: #409EFF;
+}
+
+.announcement-content {
+  font-size: 15px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
 @media (max-width: 768px) {
   .admin-container {
     padding: 10px;
@@ -465,7 +794,8 @@ function handleLogout() {
   
   .search-input,
   .role-filter,
-  .status-filter {
+  .status-filter,
+  .category-filter {
     max-width: none;
     width: 100%;
     margin-bottom: 10px;

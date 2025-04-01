@@ -40,9 +40,44 @@ router.post('/payment-codes', authenticateToken, upload.single('file'), async (r
             return next(new AppError('未收到文件', 400));
         }
         
-        const image_url = `/uploads/${req.file.filename}`;
+        // 获取支付码类型，默认为支付宝
+        const type = req.body.type || 'alipay';
         
-        console.log('收到支付码上传:', req.file);
+        if (!['alipay', 'wechat'].includes(type)) {
+            return next(new AppError('支付码类型无效，必须是alipay或wechat', 400));
+        }
+        
+        const image_url = `/uploads/${req.file.filename}`;
+        console.log('收到支付码上传:', req.file, '类型:', type);
+        
+        // 查找是否已存在该类型的支付码
+        const existingCode = await db(
+            'SELECT * FROM payment_codes WHERE seller_id = $1 AND type = $2',
+            [req.user.id, type]
+        );
+        
+        // 如果已存在，则更新记录
+        if (existingCode.rows.length > 0) {
+            // 删除旧图片文件
+            if (existingCode.rows[0].image_url) {
+                deleteFile(existingCode.rows[0].image_url);
+            }
+            
+            await db(
+                'UPDATE payment_codes SET image_url = $1, updated_at = NOW() WHERE seller_id = $2 AND type = $3',
+                [image_url, req.user.id, type]
+            );
+            
+            console.log(`已更新${type}收款码，卖家ID:${req.user.id}`);
+        } else {
+            // 否则，添加新记录
+            await db(
+                'INSERT INTO payment_codes (seller_id, type, image_url) VALUES ($1, $2, $3)',
+                [req.user.id, type, image_url]
+            );
+            
+            console.log(`已添加${type}收款码，卖家ID:${req.user.id}`);
+        }
         
         // 返回文件路径
         return res.status(200).json({
@@ -50,6 +85,7 @@ router.post('/payment-codes', authenticateToken, upload.single('file'), async (r
             path: image_url
         });
     } catch (error) {
+        console.error('上传支付码失败:', error);
         next(new AppError('上传支付码失败: ' + error.message, 500));
     }
 });

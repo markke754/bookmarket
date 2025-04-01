@@ -95,8 +95,9 @@ async function handleRegister() {
   justify-content: center;
   align-items: center;
   height: 100vh;
-  background-color: var(--background-light);
-  background-image: linear-gradient(135deg, var(--background-light) 0%, var(--background-dark) 100%);
+  background-color: var(--bg-secondary);
+  background-image: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
+  transition: background-color var(--transition-normal), background-image var(--transition-normal);
 }
 
 .register-card {
@@ -104,6 +105,9 @@ async function handleRegister() {
   border-radius: var(--border-radius-medium);
   box-shadow: var(--box-shadow);
   padding: 10px 20px;
+  background-color: var(--card-bg);
+  color: var(--text-primary);
+  transition: background-color var(--transition-normal), color var(--transition-normal);
 }
 
 .register-header {

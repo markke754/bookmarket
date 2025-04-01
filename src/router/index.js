@@ -27,6 +27,30 @@ const routes = [
     meta: { requiresAuth: true, role: 'admin', title: '图书商城 - 管理员控制台' },
   },
   {
+    path: '/admin/users',
+    name: 'AdminUsers',
+    component: () => import('../views/Admin.vue'),
+    meta: { requiresAuth: true, role: 'admin', title: '图书商城 - 用户管理', activeTab: 'users' },
+  },
+  {
+    path: '/admin/books',
+    name: 'AdminBooks',
+    component: () => import('../views/Admin.vue'),
+    meta: { requiresAuth: true, role: 'admin', title: '图书商城 - 图书管理', activeTab: 'books' },
+  },
+  {
+    path: '/admin/orders',
+    name: 'AdminOrders',
+    component: () => import('../views/Admin.vue'),
+    meta: { requiresAuth: true, role: 'admin', title: '图书商城 - 订单管理', activeTab: 'orders' },
+  },
+  {
+    path: '/admin/announcements',
+    name: 'AdminAnnouncements',
+    component: () => import('../views/Admin.vue'),
+    meta: { requiresAuth: true, role: 'admin', title: '图书商城 - 公告管理', activeTab: 'announcements' },
+  },
+  {
     path: '/seller',
     name: 'Seller',
     component: () => import('../views/Seller.vue'),

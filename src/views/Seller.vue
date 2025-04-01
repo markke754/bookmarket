@@ -100,6 +100,7 @@
                 :on-success="handleAlipayUploadSuccess"
                 :on-error="handleUploadError"
                 :before-upload="beforeUpload"
+                :data="{type: 'alipay'}"
                 name="file"
               >
                 <img v-if="paymentSettings.alipayCode" :src="getImageUrl(paymentSettings.alipayCode)" class="payment-code-preview" />
@@ -119,6 +120,7 @@
                 :on-success="handleWechatUploadSuccess"
                 :on-error="handleUploadError"
                 :before-upload="beforeUpload"
+                :data="{type: 'wechat'}"
                 name="file"
               >
                 <img v-if="paymentSettings.wechatCode" :src="getImageUrl(paymentSettings.wechatCode)" class="payment-code-preview" />

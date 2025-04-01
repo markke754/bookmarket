@@ -66,6 +66,9 @@
       </div>
       
       <div class="navbar-user">
+        <!-- 主题切换按钮 -->
+        <ThemeToggle />
+        
         <template v-if="isLoggedIn">
           <el-dropdown trigger="click" @command="handleCommand">
             <div class="user-info">
@@ -105,6 +108,7 @@ import { computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import { ElMessage, ElMessageBox } from 'element-plus';
+import ThemeToggle from './ThemeToggle.vue';
 import { 
   ShoppingBag, 
   List, 
@@ -149,13 +153,14 @@ function confirmLogout() {
 
 <style scoped>
 .navbar {
-  background-color: #fff;
+  background-color: var(--navbar-bg);
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   z-index: 1000;
+  transition: background-color var(--transition-normal);
 }
 
 .navbar-container {
@@ -189,7 +194,7 @@ function confirmLogout() {
   align-items: center;
   padding: 0 15px;
   height: 60px;
-  color: #606266;
+  color: var(--navbar-text);
   text-decoration: none;
   transition: all 0.3s;
 }
@@ -223,7 +228,7 @@ function confirmLogout() {
 }
 
 .user-info:hover {
-  background-color: #f5f7fa;
+  background-color: var(--bg-tertiary);
 }
 
 .username {
@@ -232,6 +237,7 @@ function confirmLogout() {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--navbar-text);
 }
 
 .login-btn, .register-btn {
@@ -255,8 +261,12 @@ function confirmLogout() {
     display: none;
   }
   
+  .nav-item .el-icon {
+    margin-right: 0;
+  }
+  
   .username {
-    max-width: 80px;
+    display: none;
   }
 }
 </style> 

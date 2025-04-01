@@ -131,8 +131,35 @@ export const useAuthStore = defineStore('auth', {
     // 自动恢复会话（如果有存储的token）
     autoLogin() {
       if (this.token && this.user) {
+        // 验证用户信息完整性
+        if (!this.user.role) {
+          console.error('用户信息不完整，尝试重新解析缓存');
+          try {
+            const cachedUser = localStorage.getItem('user');
+            if (cachedUser) {
+              this.user = JSON.parse(cachedUser);
+              console.log('从缓存重新加载的用户信息:', this.user);
+            }
+          } catch (e) {
+            console.error('解析缓存用户信息失败:', e);
+            // 信息不完整或失效，执行登出
+            this.logout();
+            return false;
+          }
+        }
+        
         // 配置全局axios默认头部
         this.setAxiosDefaultHeader();
+        
+        // 额外日志
+        console.log('自动登录成功，当前用户信息:', {
+          id: this.user.id,
+          username: this.user.username,
+          role: this.user.role,
+          token存在: !!this.token,
+          tokenLength: this.token?.length
+        });
+        
         return true;
       }
       return false;
@@ -142,6 +169,9 @@ export const useAuthStore = defineStore('auth', {
     setAxiosDefaultHeader() {
       if (this.token) {
         axios.defaults.headers.common['Authorization'] = `Bearer ${this.token}`;
+        console.log('已设置全局认证头部');
+      } else {
+        console.warn('无法设置认证头部，token不存在');
       }
     },
     
@@ -162,6 +192,62 @@ export const useAuthStore = defineStore('auth', {
           // token已过期，执行登出
           this.logout();
         }
+        return false;
+      }
+    },
+    
+    // 检查和刷新认证状态
+    async checkAuth() {
+      console.log('检查认证状态...');
+      if (!this.token) {
+        console.log('token不存在，尝试从localStorage恢复');
+        const storedToken = localStorage.getItem('token');
+        const storedUser = localStorage.getItem('user');
+        
+        if (storedToken && storedUser) {
+          try {
+            this.token = storedToken;
+            this.user = JSON.parse(storedUser);
+            this.setAxiosDefaultHeader();
+            console.log('从localStorage恢复会话成功');
+          } catch (e) {
+            console.error('解析localStorage用户数据失败:', e);
+            this.logout();
+            return false;
+          }
+        } else {
+          console.log('localStorage中没有存储的会话');
+          return false;
+        }
+      }
+      
+      // 验证token有效性
+      try {
+        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+        const response = await axios.get(`${apiUrl}/api/users/me`, {
+          headers: {
+            Authorization: `Bearer ${this.token}`
+          }
+        });
+        
+        // 更新用户信息
+        if (response.data && response.data.user) {
+          this.user = response.data.user;
+          localStorage.setItem('user', JSON.stringify(this.user));
+          console.log('认证状态检查成功，用户信息已更新');
+          return true;
+        }
+        
+        return !!this.user;
+      } catch (error) {
+        console.error('认证状态检查失败:', error);
+        
+        // 如果是401或403，表示token已失效
+        if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+          console.log('认证token已失效，执行登出');
+          this.logout();
+        }
+        
         return false;
       }
     }

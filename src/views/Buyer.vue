@@ -72,15 +72,7 @@
     </div>
     
     <!-- 购物车抽屉 -->
-    <el-drawer
-      v-model="cartDrawerVisible"
-      title="购物车"
-      direction="rtl"
-      size="30%"
-      :before-close="handleCloseCart"
-    >
-      <ShoppingCart @checkout="openCheckoutDialog" />
-    </el-drawer>
+    <ShoppingCart ref="shoppingCartRef" @checkout="openCheckoutDialog" />
     
     <!-- 结账对话框 -->
     <el-dialog
@@ -130,13 +122,13 @@
           <h3>扫码支付</h3>
           <div class="qrcode-container">
             <img 
-              v-if="selectedPaymentMethod === 'alipay' && sellerPaymentCodes.alipay" 
-              :src="getImageUrl(sellerPaymentCodes.alipay)" 
+              v-if="selectedPaymentMethod === 'alipay' && getPaymentCodeUrl('alipay')" 
+              :src="getImageUrl(getPaymentCodeUrl('alipay'))" 
               alt="支付宝二维码" 
             />
             <img 
-              v-if="selectedPaymentMethod === 'wechat' && sellerPaymentCodes.wechat" 
-              :src="getImageUrl(sellerPaymentCodes.wechat)" 
+              v-if="selectedPaymentMethod === 'wechat' && getPaymentCodeUrl('wechat')" 
+              :src="getImageUrl(getPaymentCodeUrl('wechat'))" 
               alt="微信支付二维码" 
             />
             <div v-if="!canPay" class="no-payment-method">
@@ -163,14 +155,14 @@
     
     <!-- 购物车按钮 -->
     <div class="cart-button-container">
-      <el-badge :value="cartItems.length ? cartItems.length : ''" class="cart-badge">
+      <el-badge :value="cartItems.length ? cartItems.length : ''" class="cart-badge" :hidden="cartItems.length === 0">
         <el-button 
           type="primary" 
           circle 
-          @click="cartDrawerVisible = true" 
+          @click="openShoppingCart" 
           class="cart-button"
         >
-          <el-icon><ShoppingCart /></el-icon>
+          <el-icon><ShoppingCartIcon /></el-icon>
         </el-button>
       </el-badge>
     </div>
@@ -182,7 +174,7 @@ import { ref, reactive, computed, onMounted } from 'vue';
 import { useCartStore } from '../stores/cart';
 import { useAuthStore } from '../stores/auth';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { ShoppingCart as ShoppingCartIcon } from '@element-plus/icons-vue';
+import { ShoppingCart as ShoppingCartIcon, Picture } from '@element-plus/icons-vue';
 import ShoppingCart from '../components/ShoppingCart.vue';
 import LoadingIndicator from '../components/LoadingIndicator.vue';
 import AlipayIcon from '../components/icons/AlipayIcon.vue';
@@ -205,7 +197,7 @@ const currentPage = ref(1);
 const pageSize = ref(12);
 const totalBooks = ref(0);
 const loading = ref(false);
-const cartDrawerVisible = ref(false);
+const shoppingCartRef = ref(null);
 const checkoutDialogVisible = ref(false);
 const selectedPaymentMethod = ref('alipay');
 const sellerPaymentCodes = ref(null);
@@ -218,12 +210,23 @@ const total = computed(() => {
 });
 
 const canPay = computed(() => {
-  if (!sellerPaymentCodes.value || !selectedPaymentMethod.value) return false;
+  console.log('支付码数据:', sellerPaymentCodes.value);
+  if (!sellerPaymentCodes.value) return false;
   
   if (selectedPaymentMethod.value === 'alipay') {
-    return !!sellerPaymentCodes.value.alipay;
+    // 检查支付宝码是否存在，适配不同格式
+    return !!(sellerPaymentCodes.value.alipay || 
+             sellerPaymentCodes.value.payment_methods?.alipay ||
+             (typeof sellerPaymentCodes.value === 'object' && 
+              Object.values(sellerPaymentCodes.value).find(code => 
+                code.type === 'alipay' || code.type === 'zhifubao')));
   } else if (selectedPaymentMethod.value === 'wechat') {
-    return !!sellerPaymentCodes.value.wechat;
+    // 检查微信码是否存在，适配不同格式
+    return !!(sellerPaymentCodes.value.wechat || 
+             sellerPaymentCodes.value.payment_methods?.wechat ||
+             (typeof sellerPaymentCodes.value === 'object' && 
+              Object.values(sellerPaymentCodes.value).find(code => 
+                code.type === 'wechat' || code.type === 'weixin')));
   }
   
   return false;
@@ -339,59 +342,172 @@ function handlePageChange(page) {
   fetchBooks();
 }
 
-// 添加到购物车
+// 加入购物车
 function addToCart(book) {
-  cartStore.addItem(book);
-  ElMessage.success(`已将《${book.title}》添加到购物车`);
+  // 确保图片URL字段正确
+  const bookWithCorrectImage = {
+    ...book,
+    image_url: book.image_url || book.image || 'default-book.jpg'
+  };
+  
+  // 确保图片URL使用完整路径
+  console.log('加入购物车的书籍:', bookWithCorrectImage);
+  console.log('图片路径:', bookWithCorrectImage.image_url);
+  
+  cartStore.addItem(bookWithCorrectImage);
+  ElMessage.success(`《${book.title}》已加入购物车`);
 }
 
-// 关闭购物车抽屉
-function handleCloseCart(done) {
-  done();
-}
-
-// 关闭结账对话框
-function handleCloseCheckout(done) {
-  if (paymentProcessing.value) {
-    ElMessageBox.confirm('支付处理中，确定要取消吗?', '提示', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning'
-    }).then(() => {
-      paymentProcessing.value = false;
-      done();
-    }).catch(() => {});
-  } else {
-    done();
+// 处理购物车
+function openShoppingCart() {
+  if (shoppingCartRef.value) {
+    shoppingCartRef.value.openDrawer();
   }
 }
 
-// 打开结账对话框
+function handleCloseCheckout() {
+  checkoutDialogVisible.value = false;
+}
+
+// 打开结算对话框
 async function openCheckoutDialog() {
+  // 关闭购物车抽屉
+  if (shoppingCartRef.value) {
+    shoppingCartRef.value.closeDrawer();
+  }
+  
   if (cartItems.value.length === 0) {
-    ElMessage.warning('购物车为空，无法结账');
+    ElMessage.warning('购物车为空，无法结算');
     return;
   }
   
-  loading.value = true;
-  try {
-    // 准备订单并获取卖家支付码
-    const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/orders/prepare`, {
-      items: cartItems.value
-    });
-    
-    sellerPaymentCodes.value = response.data.paymentCodes;
-    selectedSeller.value = response.data.seller;
-    checkoutDialogVisible.value = true;
-  } catch (error) {
-    console.error('准备订单失败:', error);
-    if (error.response && error.response.data && error.response.data.message) {
-      ElMessage.error(error.response.data.message);
-    } else {
-      ElMessage.error('准备订单失败，请稍后重试');
+  if (cartItems.value.length > 0) {
+    try {
+      loading.value = true;
+      
+      // 过滤掉没有有效ID的图书
+      const validItems = cartItems.value.filter(item => item.id);
+      
+      // 如果有无效项，先从购物车移除
+      if (validItems.length < cartItems.value.length) {
+        const invalidItems = cartItems.value.filter(item => !item.id);
+        invalidItems.forEach(item => {
+          const index = cartItems.value.findIndex(cartItem => cartItem === item);
+          if (index !== -1) {
+            cartStore.removeItem(index);
+          }
+        });
+        
+        ElMessage.warning('购物车中存在无效图书，已自动移除');
+        
+        // 如果购物车为空，则不继续结算
+        if (cartStore.items.length === 0) {
+          loading.value = false;
+          return;
+        }
+      }
+      
+      // 首先验证购物车中的图书是否仍然存在
+      const bookIds = validItems.map(item => item.id).filter(Boolean);
+      
+      if (bookIds.length === 0) {
+        ElMessage.warning('购物车中没有有效图书');
+        loading.value = false;
+        return;
+      }
+      
+      const validationResponse = await axios.post(`${import.meta.env.VITE_API_URL}/api/books/validate`, {
+        bookIds: bookIds
+      });
+      
+      // 检查是否有不存在的图书
+      if (validationResponse.data.invalidBooks && validationResponse.data.invalidBooks.length > 0) {
+        // 找出不存在的图书
+        const invalidIds = validationResponse.data.invalidBooks;
+        const invalidItems = cartItems.value.filter(item => invalidIds.includes(item.id));
+        
+        // 从购物车中移除不存在的图书
+        invalidItems.forEach(item => {
+          const index = cartItems.value.findIndex(cartItem => cartItem.id === item.id);
+          if (index !== -1) {
+            cartStore.removeItem(index);
+          }
+        });
+        
+        // 提示用户
+        ElMessage.error(`部分图书已不存在，已从购物车中移除`);
+        
+        // 如果购物车为空，则不继续结算
+        if (cartStore.items.length === 0) {
+          loading.value = false;
+          return;
+        }
+      }
+      
+      // 获取商品所属的卖家信息
+      const sellerId = cartItems.value[0].seller_id;
+      
+      // 确保所有商品来自同一卖家
+      const isSingleSeller = cartItems.value.every(item => item.seller_id === sellerId);
+      if (!isSingleSeller) {
+        ElMessage.warning('购物车包含来自不同卖家的商品，请分开结算');
+        loading.value = false;
+        return;
+      }
+      
+      // 使用新的API端点获取卖家支付信息
+      const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/orders/prepare`, {
+        items: validItems
+      }, {
+        headers: {
+          Authorization: `Bearer ${authStore.token}`
+        }
+      });
+      
+      console.log('获取支付信息响应:', response.data);
+      
+      // 修改判断条件，兼容不同的响应格式
+      if (response.data.success === true) {
+        console.log('获取成功，支付方式数据:', response.data.data.payment_methods);
+        sellerPaymentCodes.value = response.data.data.payment_methods;
+        selectedSeller.value = response.data.data.seller;
+        checkoutDialogVisible.value = true;
+        
+        // 打印支付方式数据，用于调试
+        if (sellerPaymentCodes.value) {
+          console.log('支付宝码:', sellerPaymentCodes.value.alipay);
+          console.log('微信码:', sellerPaymentCodes.value.wechat);
+          console.log('canPay计算结果:', canPay.value);
+        }
+      } else if (response.data.sellerPaymentCodes) {
+        // 兼容旧版API格式
+        console.log('获取成功(旧格式)，支付方式数据:', response.data.sellerPaymentCodes);
+        sellerPaymentCodes.value = response.data.sellerPaymentCodes;
+        selectedSeller.value = response.data.seller;
+        checkoutDialogVisible.value = true;
+        
+        // 打印支付方式数据，用于调试
+        if (sellerPaymentCodes.value) {
+          console.log('支付宝码:', sellerPaymentCodes.value.alipay);
+          console.log('微信码:', sellerPaymentCodes.value.wechat);
+          console.log('canPay计算结果:', canPay.value);
+        }
+      } else {
+        // 失败情况
+        console.error('获取支付信息失败，响应:', response.data);
+        ElMessage.error(response.data.message || '无法获取支付信息');
+      }
+    } catch (error) {
+      console.error('获取支付信息出错:', error);
+      if (error.response && error.response.data) {
+        console.error('错误响应数据:', error.response.data);
+        ElMessage.error(error.response.data.message || '获取支付信息失败');
+      } else {
+        ElMessage.error('获取支付信息失败，请重试');
+      }
+    } finally {
+      loading.value = false;
     }
-  } finally {
-    loading.value = false;
   }
 }
 
@@ -404,10 +520,70 @@ async function confirmPayment() {
   
   paymentProcessing.value = true;
   try {
+    // 过滤掉没有有效ID的图书
+    const validItems = cartItems.value.filter(item => item.id);
+    
+    // 如果有无效项，先从购物车移除
+    if (validItems.length < cartItems.value.length) {
+      const invalidItems = cartItems.value.filter(item => !item.id);
+      invalidItems.forEach(item => {
+        const index = cartItems.value.findIndex(cartItem => cartItem === item);
+        if (index !== -1) {
+          cartStore.removeItem(index);
+        }
+      });
+      
+      // 如果购物车为空，则不继续结算
+      if (cartStore.items.length === 0) {
+        paymentProcessing.value = false;
+        ElMessage.warning('购物车中没有有效图书');
+        checkoutDialogVisible.value = false;
+        return;
+      }
+    }
+    
+    // 再次验证所有图书是否存在
+    const bookIds = validItems.map(item => item.id).filter(Boolean);
+    
+    if (bookIds.length === 0) {
+      paymentProcessing.value = false;
+      ElMessage.warning('购物车中没有有效图书');
+      checkoutDialogVisible.value = false;
+      return;
+    }
+    
+    const validationResponse = await axios.post(`${import.meta.env.VITE_API_URL}/api/books/validate`, {
+      bookIds: bookIds
+    });
+    
+    // 检查是否有不存在的图书
+    if (validationResponse.data.invalidBooks && validationResponse.data.invalidBooks.length > 0) {
+      // 找出不存在的图书
+      const invalidIds = validationResponse.data.invalidBooks;
+      const invalidItems = cartItems.value.filter(item => invalidIds.includes(item.id));
+      
+      // 从购物车中移除不存在的图书
+      invalidItems.forEach(item => {
+        const index = cartItems.value.findIndex(cartItem => cartItem.id === item.id);
+        if (index !== -1) {
+          cartStore.removeItem(index);
+        }
+      });
+      
+      paymentProcessing.value = false;
+      ElMessage.error('部分图书已不存在，已从购物车中移除，请重新结算');
+      checkoutDialogVisible.value = false;
+      return;
+    }
+    
     const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/orders/confirm`, {
-      sellerId: selectedSeller.value.id,
-      items: cartItems.value,
-      paymentMethod: selectedPaymentMethod.value
+      paymentMethod: selectedPaymentMethod.value,
+      selectedSeller: selectedSeller.value,
+      cartItems: validItems
+    }, {
+      headers: {
+        Authorization: `Bearer ${authStore.token}`
+      }
     });
     
     ElMessage.success('支付成功！');
@@ -428,6 +604,43 @@ async function confirmPayment() {
 // 查看书籍详情
 function viewBookDetail(bookId) {
   router.push(`/book/${bookId}`);
+}
+
+// 添加获取支付码URL的函数
+function getPaymentCodeUrl(type) {
+  if (!sellerPaymentCodes.value) return null;
+  
+  // 尝试直接访问特定格式
+  if (sellerPaymentCodes.value[type]) {
+    return sellerPaymentCodes.value[type];
+  }
+  
+  // 尝试从payment_methods格式获取
+  if (sellerPaymentCodes.value.payment_methods && sellerPaymentCodes.value.payment_methods[type]) {
+    return sellerPaymentCodes.value.payment_methods[type];
+  }
+  
+  // 尝试从对象数组中查找
+  if (typeof sellerPaymentCodes.value === 'object') {
+    // 支付宝有不同的名称
+    const typeAliases = {
+      'alipay': ['alipay', 'zhifubao', 'aliPay'],
+      'wechat': ['wechat', 'weixin', 'wechatPay', 'wx']
+    };
+    
+    // 查找匹配别名的支付码
+    const matchedCode = Object.values(sellerPaymentCodes.value)
+      .find(code => {
+        if (!code || typeof code !== 'object') return false;
+        return typeAliases[type].includes(code.type);
+      });
+    
+    if (matchedCode) {
+      return matchedCode.image_url;
+    }
+  }
+  
+  return null;
 }
 
 // 组件挂载时获取书籍列表
@@ -881,16 +1094,17 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
+  margin-right: 15px;
 }
 
 .cart-button {
   background-color: var(--primary-color);
   color: white;
-  width: 56px;
-  height: 56px;
+  width: 50px;
+  height: 50px;
   border: none;
   border-radius: 50%;
-  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.16);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.16), 0 3px 6px rgba(0, 0, 0, 0.23);
   display: flex;
   justify-content: center;
   align-items: center;
