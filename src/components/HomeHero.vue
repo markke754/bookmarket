@@ -51,12 +51,23 @@ class Particle {
     this.distance = 0;
     this.friction = Math.random() * 0.03 + 0.92;
     this.ease = Math.random() * 0.1 + 0.01;
+    // 添加浮动效果相关属性
+    this.floatAngle = Math.random() * Math.PI * 2;
+    this.floatSpeed = Math.random() * 0.001 + 0.001;
+    this.floatRange = Math.random() * 30 + 10;
   }
 
   update(mouseX, mouseY) {
     this.distance = Math.sqrt(
       Math.pow(this.x - mouseX, 2) + Math.pow(this.y - mouseY, 2)
     );
+    
+    // 更新浮动角度
+    this.floatAngle += this.floatSpeed;
+    
+    // 计算浮动偏移量
+    const floatOffsetX = Math.sin(this.floatAngle) * this.floatRange * 0.3;
+    const floatOffsetY = Math.cos(this.floatAngle * 0.5) * this.floatRange * 0.2;
     
     // 鼠标引力场效果
     if (this.distance < 120) {
@@ -66,9 +77,9 @@ class Particle {
       this.vy += this.force * Math.sin(this.angle) * 0.2;
     }
     
-    // 回归原始位置
-    const dx = this.originX - this.x;
-    const dy = this.originY - this.y;
+    // 回归原始位置（考虑浮动偏移）
+    const dx = (this.originX + floatOffsetX) - this.x;
+    const dy = (this.originY + floatOffsetY) - this.y;
     this.vx += dx * this.ease;
     this.vy += dy * this.ease;
     
@@ -307,4 +318,4 @@ onMounted(() => {
     height: 100%;
   }
 }
-</style> 
+</style>
